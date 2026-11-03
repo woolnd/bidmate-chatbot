@@ -1,0 +1,26 @@
+# 비밀값 — 절대 올리지 않는다
+.env
+
+# 원본 RFP와 가공 데이터, Chroma 저장소 — 비밀유지 대상이라 절대 올리지 않는다
+data/*
+!data/.gitkeep
+
+# 운영 로그 (질문 내용에 RFP 내용이 섞여 있다)
+logs/
+
+# 평가 정답 (원본 RFP 내용이 들어 있다). 양식 파일만 올린다
+evaluation/*.csv
+!evaluation/questions_template.csv
+evaluation/results/
+
+# 파이썬
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# 에디터
+.vscode/
+.idea/
+.DS_Store

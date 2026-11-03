@@ -1,0 +1,48 @@
+[project]
+name = "bidmate-chatbot"
+version = "0.1.0"
+description = "입찰메이트 RFP 문서 기반 RAG 챗봇 (코드잇 스프린트 AI 중급 프로젝트)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # 흐름 연결
+    "langchain>=1.0",
+    "langchain-openai>=1.0",
+    "langchain-chroma>=1.0",
+    "langgraph>=1.0",
+    # 저장소
+    "chromadb>=1.0",
+    # 데이터 다루기
+    "pandas>=2.2",
+    "pydantic>=2.9",
+    # 설정
+    "python-dotenv>=1.0",
+    # 화면
+    "streamlit>=1.40",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bidmate"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E: 기본 스타일, F: 쓰지 않는 import 등 실수, I: import 정렬
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 외부 라이브러리(langsmith)가 내는 경고는 우리 코드 문제가 아니라서 숨긴다
+filterwarnings = ["ignore::DeprecationWarning:langsmith.*"]
