@@ -40,8 +40,8 @@ uv run ruff check . && uv run ruff format . # 코드 스타일 검사·정리
 
 | 담당 | 파일 |
 | --- | --- |
-| 데이터-1 | `src/bidmate/data/loader.py` (hwp), `src/bidmate/data/chunker.py` |
-| 데이터-2 | `src/bidmate/data/loader.py` (pdf, 텍스트 정리) |
+| 데이터-1 | `src/bidmate/data/hwp_loader.py`, `src/bidmate/data/chunker.py` |
+| 데이터-2 | `src/bidmate/data/pdf_loader.py`, `src/bidmate/data/loader.py` (확장자 분기, 텍스트 정리) |
 | 데이터-3 | `src/bidmate/data/metadata.py`, `evaluation/` |
 | 검색-1 | `src/bidmate/retrieval/project_finder.py` |
 | 검색-2 | `src/bidmate/retrieval/vector_store.py` |
