@@ -12,7 +12,7 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. 레포 받기
-git clone <레포 주소>
+git clone https://github.com/woolnd/bidmate-chatbot.git
 cd bidmate-chatbot
 
 # 3. 패키지 설치 (Python 3.12도 자동으로 설치됨)
@@ -28,8 +28,8 @@ cp .env.example .env
 ## 실행
 
 ```bash
-uv run python scripts/build_index.py       # 문서를 잘라 Vector DB에 저장 (문서가 바뀔 때만)
-uv run streamlit run app/streamlit_app.py  # 챗봇 화면
+uv run python scripts/build_index.py       # 문서를 잘라 Vector DB에 저장 (문서가 바뀔 때만, 구현 후)
+uv run streamlit run app/streamlit_app.py  # 챗봇 화면 (구현 후)
 uv run pytest                              # 테스트
 uv run ruff check . && uv run ruff format . # 코드 스타일 검사·정리
 ```
@@ -47,7 +47,7 @@ uv run ruff check . && uv run ruff format . # 코드 스타일 검사·정리
 | 검색-2 | `src/bidmate/retrieval/vector_store.py` |
 | 재웅 | `src/bidmate/generation/`, `src/bidmate/pipeline/`, `src/bidmate/service/`, `app/` |
 
-파일을 열면 맨 위 설명과 `TODO(담당)` 아래에 할 일과 참고 키워드가 적혀 있습니다.
+파일을 열면 맨 위에 역할과 받는 것 / 넘기는 것이 적혀 있습니다.
 
 ## 흐름
 
