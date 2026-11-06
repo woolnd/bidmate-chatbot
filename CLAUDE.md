@@ -20,15 +20,15 @@ uv run ruff check . && uv run ruff format . # 코드 스타일 검사와 자동 
 
 ## 시스템 흐름
 
-미리 한 번: 문서 읽기 → 조각으로 자르기 → 조각 앞에 기관명·사업명 붙이기 → Chroma에 저장
+미리 한 번: 목록표 읽기 → 문서 읽기 → 조각으로 자르기(문서마다 기본 정보 조각 1개 추가) → 조각 앞에 기관명·사업명 붙이기 → Chroma에 저장
 
 질문이 올 때마다 아래 4단계를 항상 같은 순서로 지나간다. AI가 스스로 도구를 고르는 에이전트 방식은 쓰지 않는다.
 
 | 단계 | 파일 | 담당 |
 | --- | --- | --- |
 | 1. 질문 다듬기 | `src/bidmate/generation/question_rewriter.py` | 재웅 |
-| 2. 기관·사업 찾기 | `src/bidmate/retrieval/project_finder.py` | 검색-1 |
-| 3. 문서 검색 | `src/bidmate/retrieval/vector_store.py` | 검색-2 |
+| 2. 어느 문서인지 고르기 | `src/bidmate/retrieval/project_finder.py` | 검색 파트 |
+| 3. 문서에서 관련 부분 찾기 | `src/bidmate/retrieval/vector_store.py` | 검색 파트 |
 | 4. 답변 만들기 | `src/bidmate/generation/answer_generator.py` | 재웅 |
 
 4단계 연결은 `src/bidmate/pipeline/graph.py`(LangGraph)에서 한다.
@@ -40,7 +40,7 @@ src/bidmate/
   schemas.py          # 파트 간 데이터 약속. 바꾸기 전에 PM에게 먼저 말한다
   config.py           # 설정값 (모델 이름, 경로, k 값 등)
   data/               # 데이터 파트: 문서 읽기, 목록표, 조각 자르기
-  retrieval/          # 검색 파트: 기관 찾기, 저장·검색
+  retrieval/          # 검색 파트: 문서 고르기, 저장·검색
   generation/         # 생성: 질문 다듬기, 프롬프트, 답변
   pipeline/           # 4단계 연결
   service/            # 로그, 응답 캐시
@@ -77,7 +77,7 @@ data/                 # 원본·가공 데이터, Chroma 저장 폴더 (Git에 �
 
 팀원 대부분이 RAG를 처음 만든다. AI 도구는 이렇게 도와준다.
 
-- 작업을 시작할 때 팀원이 자기 담당(예: "나는 검색-1, 2단계 담당")을 먼저 AI에게 말한다.
+- 작업을 시작할 때 팀원이 자기 담당(예: "나는 검색 파트, 2단계 담당")을 먼저 AI에게 말한다.
 - 코드를 바꾸기 전에 무엇을 왜 바꾸는지 먼저 설명한다.
 - 자기 담당 파일 밖을 고쳐야 하면, 고치지 말고 먼저 알려 준다.
 - 새 패키지가 필요하면 `uv add 패키지명`으로 추가하고, 왜 필요한지 설명한다.

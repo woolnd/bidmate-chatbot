@@ -40,21 +40,18 @@ uv run ruff check . && uv run ruff format . # 코드 스타일 검사·정리
 
 | 담당 | 파일 |
 | --- | --- |
-| 데이터-1 | `src/bidmate/data/hwp_loader.py`, `src/bidmate/data/chunker.py` |
-| 데이터-2 | `src/bidmate/data/pdf_loader.py`, `src/bidmate/data/loader.py` (확장자 분기, 텍스트 정리) |
-| 데이터-3 | `src/bidmate/data/metadata.py`, `evaluation/` |
-| 검색-1 | `src/bidmate/retrieval/project_finder.py` |
-| 검색-2 | `src/bidmate/retrieval/vector_store.py` |
+| 데이터 파트 | `src/bidmate/data/`, `evaluation/` (평가셋) |
+| 검색 파트 | `src/bidmate/retrieval/` |
 | 재웅 | `src/bidmate/generation/`, `src/bidmate/pipeline/`, `src/bidmate/service/`, `app/` |
 
-파일을 열면 맨 위에 역할과 받는 것 / 넘기는 것이 적혀 있습니다.
+파트 안에서 누가 어떤 파일을 맡을지는 파트끼리 정합니다. 파일을 열면 맨 위에 역할과 받는 것 / 넘기는 것이 적혀 있습니다.
 
 ## 흐름
 
 ```
 미리 한 번:  문서 읽기 → 조각 자르기 → 머리말 붙이기 → Chroma 저장
 
-질문마다:   1. 질문 다듬기 → 2. 기관·사업 찾기 → 3. 문서 검색 → 4. 답변 만들기
+질문마다:   1. 질문 다듬기 → 2. 어느 문서인지 고르기 → 3. 문서에서 관련 부분 찾기 → 4. 답변 만들기
 ```
 
 단계 사이에 주고받는 형식은 `src/bidmate/schemas.py` 에 있습니다. **바꾸기 전에 PM에게 먼저 말해 주세요.**
