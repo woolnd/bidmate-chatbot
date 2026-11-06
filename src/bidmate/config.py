@@ -24,3 +24,10 @@ PROJECT_LIST_PATH = RAW_FOLDER / "data_list.csv"  # 목록표
 # 조각 자르기
 CHUNK_SIZE = 1000  # 조각 하나의 글자 수
 CHUNK_OVERLAP = 200  # 앞 조각과 겹치는 글자 수
+
+# 검색
+EMBEDDING_MODEL_NAME = "text-embedding-3-small"
+CHROMA_FOLDER = PROJECT_ROOT / "data" / "chroma"  # Chroma 저장 폴더 (Git에 안 올라간다)
+# 영어·숫자·. _ - 로 3글자 이상. 조각 크기를 바꾸면 이름도 바꿔서 옛 조각과 섞이지 않게 한다
+COLLECTION_NAME = f"rfp_chunks_{CHUNK_SIZE}"
+TOP_K = 5  # 찾아올 조각 수 (2주차에 3·5·10 비교)
