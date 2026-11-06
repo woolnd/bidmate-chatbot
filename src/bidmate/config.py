@@ -13,3 +13,14 @@
     경로               원본 문서, 목록표, Chroma 저장 폴더, 로그 폴더
     기능 켜기/끄기     1단계, 2단계, 조각 앞 기관명 (11/23~24 기능 끄기 실험용)
 """
+
+from pathlib import Path
+
+# 경로
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+RAW_FOLDER = PROJECT_ROOT / "data" / "raw"  # 원본 RFP 파일 (Git에 안 올라간다)
+PROJECT_LIST_PATH = RAW_FOLDER / "data_list.csv"  # 목록표
+
+# 조각 자르기
+CHUNK_SIZE = 1000  # 조각 하나의 글자 수
+CHUNK_OVERLAP = 200  # 앞 조각과 겹치는 글자 수
