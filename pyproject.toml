@@ -44,5 +44,6 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # tests/fake_chunks.py를 "from tests.fake_chunks import ..."로 쓰기 위해
 # 외부 라이브러리(langsmith)가 내는 경고는 우리 코드 문제가 아니라서 숨긴다
 filterwarnings = ["ignore::DeprecationWarning:langsmith.*"]
