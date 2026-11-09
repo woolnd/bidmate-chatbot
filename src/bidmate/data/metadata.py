@@ -6,6 +6,13 @@
 
 받는 것: data_list.csv 경로
 넘기는 것: ProjectInfo 목록 (project_id = 원본 파일 이름)
+
+실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
+    >>> from bidmate.config import PROJECT_LIST_PATH
+    >>> from bidmate.data.metadata import load_project_list
+    >>> projects = load_project_list(PROJECT_LIST_PATH)
+    >>> len(projects)       # 100이 나와야 한다
+    >>> projects[0]         # 첫 문서 정보 확인
 """
 
 from __future__ import annotations

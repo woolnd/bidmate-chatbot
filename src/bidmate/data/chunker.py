@@ -12,6 +12,18 @@
 
 받는 것: LoadedDocument, ProjectInfo
 넘기는 것: Document 목록
+
+실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
+    >>> from bidmate.config import PROJECT_LIST_PATH, RAW_FOLDER
+    >>> from bidmate.data.metadata import load_project_list
+    >>> from bidmate.data.loader import load_document
+    >>> from bidmate.data.chunker import split_document, make_info_chunk
+    >>> projects = load_project_list(PROJECT_LIST_PATH)
+    >>> chunks = split_document(load_document(projects[0], RAW_FOLDER), projects[0])
+    >>> len(chunks)                 # 조각 수
+    >>> print(chunks[0].page_content)   # 머리말 [기관명 / 사업명]이 붙었는지
+    >>> chunks[0].metadata          # 이름표 4칸
+    >>> make_info_chunk(projects[0])    # 기본 정보 조각
 """
 
 from __future__ import annotations

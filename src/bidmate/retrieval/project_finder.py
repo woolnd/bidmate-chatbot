@@ -8,6 +8,14 @@
 
 받는 것: 다듬은 질문, ProjectInfo 목록 (목록표)
 넘기는 것: 고른 project_id 목록 (못 고르면 빈 목록)
+
+실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
+    >>> from bidmate.config import PROJECT_LIST_PATH
+    >>> from bidmate.data.metadata import load_project_list
+    >>> from bidmate.retrieval.project_finder import find_project_ids
+    >>> projects = load_project_list(PROJECT_LIST_PATH)
+    >>> find_project_ids("국민연금공단 이러닝 사업 예산은?", projects)   # 문서 1개가 나와야 한다
+    >>> find_project_ids("오늘 날씨 어때?", projects)                  # 빈 목록 [] 이 나와야 한다
 """
 
 from __future__ import annotations

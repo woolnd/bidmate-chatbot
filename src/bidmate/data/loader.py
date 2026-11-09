@@ -7,6 +7,15 @@ hwp와 pdf 결과를 같은 형식(LoadedDocument)으로 맞춰서
 
 받는 것: ProjectInfo (목록표 한 줄)
 넘기는 것: LoadedDocument
+
+실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
+    >>> from bidmate.config import PROJECT_LIST_PATH, RAW_FOLDER
+    >>> from bidmate.data.metadata import load_project_list
+    >>> from bidmate.data.loader import load_document, clean_text
+    >>> projects = load_project_list(PROJECT_LIST_PATH)
+    >>> document = load_document(projects[0], RAW_FOLDER)   # 첫 문서 읽고 정리
+    >>> print(document.text[:1000])
+    >>> clean_text("공백이     많은    글")                   # 정리 규칙만 따로 확인
 """
 
 from __future__ import annotations

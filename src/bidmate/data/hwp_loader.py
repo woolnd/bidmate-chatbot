@@ -5,6 +5,12 @@
 
 받는 것: hwp 파일 경로
 넘기는 것: 본문 글자 전체 (정리 전. 정리는 loader.py가 한다)
+
+실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
+    >>> from bidmate.config import RAW_FOLDER
+    >>> from bidmate.data.hwp_loader import extract_hwp_text
+    >>> text = extract_hwp_text(RAW_FOLDER / "파일이름.hwp")   # data/raw/ 안의 hwp 하나
+    >>> print(text[:1000])  # 앞 1000자만 보기
 """
 
 from pathlib import Path

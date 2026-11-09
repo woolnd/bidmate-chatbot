@@ -13,6 +13,15 @@
 
 받는 것: (저장) Document 목록 / (찾기) 다듬은 질문, project_id 목록
 넘기는 것: (찾기) 관련 조각 k개, (Document, 점수) 목록
+
+실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
+    (.env에 OPENAI_API_KEY가 있어야 한다. 질문 임베딩에 아주 적은 비용이 든다)
+    >>> from bidmate.config import TOP_K
+    >>> from bidmate.retrieval.vector_store import search_chunks
+    >>> results = search_chunks("이러닝 사업 예산은?", [], TOP_K)          # 전체에서 찾기
+    >>> results = search_chunks("예산은?", ["파일이름.hwp"], TOP_K)        # 고른 문서 안에서만
+    >>> for document, score in results: print(score, document.metadata["chunk_id"])   # 엔터 두 번
+    저장(save_chunks)은 따로 부르지 말고 scripts/build_index.py로 한다 (임베딩 비용).
 """
 
 from langchain_chroma import Chroma
