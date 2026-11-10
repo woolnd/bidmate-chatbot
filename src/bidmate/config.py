@@ -31,3 +31,10 @@ CHROMA_FOLDER = PROJECT_ROOT / "data" / "chroma"  # Chroma 저장 폴더 (Git에
 # 영어·숫자·. _ - 로 3글자 이상. 조각 크기를 바꾸면 이름도 바꿔서 옛 조각과 섞이지 않게 한다
 COLLECTION_NAME = f"rfp_chunks_{CHUNK_SIZE}"
 TOP_K = 5  # 찾아올 조각 수 (2주차에 3·5·10 비교)
+
+# 생성 (1·4단계)
+ANSWER_MODEL_NAME = "gpt-5-mini"  # 1단계 질문 다듬기와 4단계 답변이 같이 쓰는 모델
+MAX_HISTORY_TURNS = 3  # AI에게 넘길 대화 기록 수 (최근 질문·답변 3번)
+
+# 기능 켜기/끄기 (11/23~24 기능 끄기 실험용)
+USE_QUESTION_REWRITE = True  # 1단계 질문 다듬기. 끄면 질문을 그대로 넘긴다
