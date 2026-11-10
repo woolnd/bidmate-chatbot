@@ -55,16 +55,21 @@ def build_rewrite_messages(question: str, recent_history: ChatHistory) -> list[B
     고정 부분을 앞에, 바뀌는 부분을 뒤에 둔다 (프롬프트 캐싱 규칙).
     """
 
+    # 1. 대화 기록을 "질문: …" / "답변: …" 줄로 바꾼다
+    #    답변은 앞 REWRITE_ANSWER_PREVIEW_LENGTH자(200자)만 넣는다 (기관명·사업명만 있으면 된다)
     history_lines: list[str] = []
     for previous_question, previous_answer in recent_history:
         answer_preview = previous_answer[:REWRITE_ANSWER_PREVIEW_LENGTH]
         history_lines.append(f"질문: {previous_question}")
         history_lines.append(f"답변: {answer_preview}")
 
+    # 2. 줄들을 한 덩어리 글로 잇는다
     history_text = "\n".join(history_lines)
 
+    # 3. 사람 메시지 글 만들기: 시스템 프롬프트 예시와 같은 모양 ("대화 기록:" → "새 질문:")
     human_message_text = "대화 기록:\n" + history_text + "\n\n새 질문: " + question
 
+    # 4. 고정 부분(시스템 메시지)을 앞에, 바뀌는 부분(사람 메시지)을 뒤에 둔다 (프롬프트 캐싱)
     messages: list[BaseMessage] = [
         SystemMessage(REWRITE_SYSTEM_PROMPT),
         HumanMessage(human_message_text),

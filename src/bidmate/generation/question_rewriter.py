@@ -48,18 +48,27 @@ def rewrite_question(
     넘기는 것: 다듬은 질문
     """
 
+    # 1. 기능이 꺼져 있거나 대화 기록이 없으면 그대로 돌려준다 (AI를 부르지 않는다. 비용 0원)
     if not USE_QUESTION_REWRITE or len(chat_history) == 0:
         return question
 
+    # 2. 대화 기록은 최근 MAX_HISTORY_TURNS번(3번)만 넘긴다
     recent_history = chat_history[-MAX_HISTORY_TURNS:]
+
+    # 3. 메시지 만들기: [시스템 메시지(고정), 사람 메시지(대화 기록 + 새 질문)]
     messages = build_rewrite_messages(question, recent_history)
 
+    # 4. 모델을 안 넣었으면 진짜 모델을 만든다 (테스트에서는 가짜 모델을 넣는다)
     if model is None:
         model = make_rewrite_model()
 
+    # 5. AI 부르기
     response = model.invoke(messages)
+
+    # 6. 결과 다듬기: 앞뒤 공백·줄바꿈을 지우고, 앞뒤 따옴표를 지운다
     rewritten_question = response.content.strip().strip("\"'")
 
+    # 7. AI가 빈 답을 주면 원래 질문으로 되돌린다 (검색이 빈 질문으로 돌지 않게)
     if len(rewritten_question) == 0:
         return question
     else:
