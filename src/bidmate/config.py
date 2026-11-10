@@ -36,5 +36,10 @@ TOP_K = 5  # 찾아올 조각 수 (2주차에 3·5·10 비교)
 ANSWER_MODEL_NAME = "gpt-5-mini"  # 1단계 질문 다듬기와 4단계 답변이 같이 쓰는 모델
 MAX_HISTORY_TURNS = 3  # AI에게 넘길 대화 기록 수 (최근 질문·답변 3번)
 
+# 1단계 질문 다듬기
+REWRITE_ANSWER_PREVIEW_LENGTH = 200  # 대화 기록의 답변은 앞 200자만 넣는다 (기관명·사업명만 필요)
+REWRITE_REASONING_EFFORT = "minimal"  # 간단한 일이라 생각을 최소로 해서 빠르고 싸게
+REWRITE_MAX_TOKENS = 300  # 다듬은 질문 한 줄이면 충분. 생각에 쓴 토큰도 여기에 포함된다
+
 # 기능 켜기/끄기 (11/23~24 기능 끄기 실험용)
 USE_QUESTION_REWRITE = True  # 1단계 질문 다듬기. 끄면 질문을 그대로 넘긴다
