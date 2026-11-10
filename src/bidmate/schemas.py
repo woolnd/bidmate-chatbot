@@ -15,69 +15,31 @@
 """
 
 from dataclasses import dataclass
-from typing import TypedDict
-
-from langchain_core.documents import Document
-from pydantic import BaseModel, Field
 
 # 조각 이름표(metadata)에 꼭 넣는 키. 데이터 파트와 검색 파트가 똑같이 쓴다.
 CHUNK_METADATA_KEYS = ("chunk_id", "project_id", "agency_name", "project_name")
 
-# 대화 기록: [(질문, 답변), (질문, 답변), ...] 오래된 것부터 차례로.
-# 화면(Streamlit)이 모아 두고, 1단계 질문 다듬기와 4단계 답변 만들기가 받는다.
-ChatHistory = list[tuple[str, str]]
 
-
-@dataclass
+@dataclass(frozen=True)
 class ProjectInfo:
-    """data_list.csv 한 줄. 목록표 읽기(데이터 파트)가 만들고 2단계·문서 읽기·조각 자르기가 쓴다.
+    """data_list.csv 한 줄. 날짜는 "2024-05-31" 모양, 비어 있는 값은 None."""
 
-    칸 이름은 조각 이름표(CHUNK_METADATA_KEYS)와 같게 맞췄다.
-    """
+    project_id: str  # 원본 파일 이름 (data/raw/ 안의 파일)
+    project_name: str  # 사업명
+    agency_name: str  # 발주 기관
+    budget: int | None  # 사업 금액(원)
+    published_date: str  # 공개 일자
+    bid_start_date: str | None  # 입찰 참여 시작일
+    bid_end_date: str | None  # 입찰 참여 마감일
+    notice_no: str | None  # 공고 번호
+    notice_round: int | None  # 공고 차수
+    summary: str  # 사업 요약
+    file_type: str  # "hwp" 또는 "pdf"
 
-    project_id: str  # csv '파일명' 그대로 (확장자 포함). 예: "가나다공단_이러닝.hwp"
-    agency_name: str  # csv '발주 기관'
-    project_name: str  # csv '사업명'
-    budget: int | None  # csv '사업 금액'(원). 비어 있거나 0이면 None
-    deadline: str | None  # csv '입찰 참여 마감일'을 "2024-05-31" 모양으로. 비어 있으면 None
 
-
-@dataclass
+@dataclass(frozen=True)
 class LoadedDocument:
-    """원본 파일에서 뽑아 정리한 글자. 문서 읽기(데이터 파트)가 만들고 조각 자르기가 쓴다."""
+    """원본 파일에서 뽑은 글자."""
 
     project_id: str  # ProjectInfo.project_id와 같은 값
-    text: str  # 정리된 본문 전체
-
-
-class AnswerResult(BaseModel):
-    """4단계 답변. AI가 이 양식을 채워서 돌려준다(구조화된 출력). 화면 표시와 평가 채점이 쓴다.
-
-    with_structured_output은 dataclass를 못 받아서 이것만 pydantic으로 만든다.
-    Field의 description은 AI에게 "이 칸에 무엇을 쓰라"는 지시로 그대로 넘어간다.
-    """
-
-    answer: str = Field(
-        description="질문에 대한 답. 찾은 조각에 있는 내용만 쓴다. "
-        "근거가 없으면 찾은 문서에 없다고 쓴다."
-    )
-    source_project_names: list[str] = Field(
-        description="답의 근거가 된 조각의 사업명 목록. 근거가 없으면 빈 목록."
-    )
-    has_evidence: bool = Field(description="찾은 조각에 답의 근거가 있으면 true, 없으면 false.")
-
-
-class ChatState(TypedDict, total=False):
-    """4단계가 주고받는 상태. graph.py(LangGraph)가 단계 사이로 넘긴다.
-
-    처음에는 question, chat_history만 넣는다. 각 단계는 자기가 만든 칸만 채워서 돌려주고,
-    LangGraph가 그 칸을 상태에 합쳐 다음 단계로 넘긴다. 끝나면 모든 칸이 차 있다.
-    total=False: 처음에 비어 있는 칸이 있어도 된다는 뜻.
-    """
-
-    question: str  # 사용자가 쓴 질문 그대로
-    chat_history: ChatHistory  # 화면이 모아 둔 대화 기록
-    rewritten_question: str  # 1단계가 채운다
-    project_ids: list[str]  # 2단계가 채운다 (못 고르면 [])
-    chunks: list[tuple[Document, float]]  # 3단계가 채운다 (Document, 점수) 목록
-    answer_result: AnswerResult  # 4단계가 채운다
+    text: str  # 본문
