@@ -5,6 +5,12 @@
 data/*
 !data/.gitkeep
 
+# 안전망: 원본 파일을 data/ 밖(레포 맨 위, tests/ 등)에 잘못 두어도 올라가지 않게 한다
+*.hwp
+*.hwpx
+*.pdf
+data_list.csv
+
 # 운영 로그 (질문 내용에 RFP 내용이 섞여 있다)
 logs/
 
