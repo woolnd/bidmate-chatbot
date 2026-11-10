@@ -15,7 +15,9 @@
 """
 
 from dataclasses import dataclass
+from typing import TypedDict
 
+from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
 # 조각 이름표(metadata)에 꼭 넣는 키. 데이터 파트와 검색 파트가 똑같이 쓴다.
@@ -63,3 +65,19 @@ class AnswerResult(BaseModel):
         description="답의 근거가 된 조각의 사업명 목록. 근거가 없으면 빈 목록."
     )
     has_evidence: bool = Field(description="찾은 조각에 답의 근거가 있으면 true, 없으면 false.")
+
+
+class ChatState(TypedDict, total=False):
+    """4단계가 주고받는 상태. graph.py(LangGraph)가 단계 사이로 넘긴다.
+
+    처음에는 question, chat_history만 넣는다. 각 단계는 자기가 만든 칸만 채워서 돌려주고,
+    LangGraph가 그 칸을 상태에 합쳐 다음 단계로 넘긴다. 끝나면 모든 칸이 차 있다.
+    total=False: 처음에 비어 있는 칸이 있어도 된다는 뜻.
+    """
+
+    question: str  # 사용자가 쓴 질문 그대로
+    chat_history: ChatHistory  # 화면이 모아 둔 대화 기록
+    rewritten_question: str  # 1단계가 채운다
+    project_ids: list[str]  # 2단계가 채운다 (못 고르면 [])
+    chunks: list[tuple[Document, float]]  # 3단계가 채운다 (Document, 점수) 목록
+    answer_result: AnswerResult  # 4단계가 채운다
