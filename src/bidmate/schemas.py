@@ -16,6 +16,8 @@
 
 from dataclasses import dataclass
 
+from pydantic import BaseModel, Field
+
 # 조각 이름표(metadata)에 꼭 넣는 키. 데이터 파트와 검색 파트가 똑같이 쓴다.
 CHUNK_METADATA_KEYS = ("chunk_id", "project_id", "agency_name", "project_name")
 
@@ -44,3 +46,20 @@ class LoadedDocument:
 
     project_id: str  # ProjectInfo.project_id와 같은 값
     text: str  # 정리된 본문 전체
+
+
+class AnswerResult(BaseModel):
+    """4단계 답변. AI가 이 양식을 채워서 돌려준다(구조화된 출력). 화면 표시와 평가 채점이 쓴다.
+
+    with_structured_output은 dataclass를 못 받아서 이것만 pydantic으로 만든다.
+    Field의 description은 AI에게 "이 칸에 무엇을 쓰라"는 지시로 그대로 넘어간다.
+    """
+
+    answer: str = Field(
+        description="질문에 대한 답. 찾은 조각에 있는 내용만 쓴다. "
+        "근거가 없으면 찾은 문서에 없다고 쓴다."
+    )
+    source_project_names: list[str] = Field(
+        description="답의 근거가 된 조각의 사업명 목록. 근거가 없으면 빈 목록."
+    )
+    has_evidence: bool = Field(description="찾은 조각에 답의 근거가 있으면 true, 없으면 false.")

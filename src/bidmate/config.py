@@ -45,5 +45,9 @@ REWRITE_ANSWER_PREVIEW_LENGTH = 200  # 대화 기록의 답변은 앞 200자만 
 REWRITE_REASONING_EFFORT = "minimal"  # 간단한 일이라 생각을 최소로 해서 빠르고 싸게
 REWRITE_MAX_TOKENS = 300  # 다듬은 질문 한 줄이면 충분. 생각에 쓴 토큰도 여기에 포함된다
 
+# 4단계 답변 만들기
+ANSWER_REASONING_EFFORT = "low"  # 조각 여러 개에서 맞는 내용을 골라야 해서 minimal보다 한 단계 위
+ANSWER_MAX_TOKENS = 800  # 생각에 쓴 토큰도 포함된다. 답이 잘리면 늘린다
+
 # 기능 켜기/끄기 (11/23~24 기능 끄기 실험용)
 USE_QUESTION_REWRITE = True  # 1단계 질문 다듬기. 끄면 질문을 그대로 넘긴다
