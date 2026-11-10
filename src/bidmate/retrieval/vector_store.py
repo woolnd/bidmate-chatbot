@@ -24,6 +24,7 @@
     저장(save_chunks)은 따로 부르지 말고 scripts/build_index.py로 한다 (임베딩 비용).
 """
 
+import logging
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -38,6 +39,9 @@ from bidmate.schemas import CHUNK_METADATA_KEYS
 # OpenAI 임베딩도 한 번 요청에 넣을 수 있는 글자 양에 한도가 있어서 나눠서 넣는다.
 # 1000자 조각 100개면 두 한도 모두에 여유가 있다
 SAVE_BATCH_SIZE = 100
+
+# 검색 결과가 0개일 때 이유를 남기는 기록 도구 (print와 달리 경고 단계로 남는다)
+logger = logging.getLogger(__name__)
 
 
 def get_vector_store(
@@ -142,11 +146,75 @@ def save_chunks(chunks: list[Document], vector_store: Chroma | None = None) -> N
     )
 
 
-def search_chunks(question: str, project_ids: list[str], k: int) -> list[tuple[Document, float]]:
-    """고른 문서 안에서 질문과 뜻이 비슷한 조각 k개를 찾는다. 빈 목록이면 전체에서 찾는다."""
-    # TODO 1. project_ids가 있으면 거르기 조건 만들기: project_id가 목록 안에 있는 조각만
-    #         ({"project_id": {"$in": project_ids}}), 빈 목록이면 조건 없음
-    # TODO 2. similarity_search_with_score(질문, k=k, filter=거르기 조건)
-    # TODO 3. 받은 (Document, 점수) 목록을 그대로 돌려주기
-    #         점수는 거리라서 작을수록 비슷하다
-    return []
+def make_project_filter(project_ids: list[str]) -> dict | None:
+    """검색-B가 고른 project_id 목록으로 Chroma 거르기 조건을 만든다.
+
+    받는 것: project_id 목록 (원본 파일 이름 그대로. 글자를 고치지 않는다)
+    넘기는 것: 거르기 조건. 빈 목록이면 None (= 거르지 않고 전체에서 찾기)
+
+    빈 목록을 {"project_id": {"$in": []}}로 넘기면 Chroma가 오류를 내서 None으로 바꾼다.
+    """
+    if len(project_ids) == 0:
+        return None
+    return {"project_id": {"$in": project_ids}}
+
+
+def search_chunks(
+    question: str,
+    project_ids: list[str],
+    k: int,
+    vector_store: Chroma | None = None,
+) -> list[tuple[Document, float]]:
+    """고른 문서 안에서 질문과 뜻이 비슷한 조각 k개를 찾는다. 빈 목록이면 전체에서 찾는다.
+
+    받는 것: question (1단계가 다듬은 질문), project_ids (2단계가 고른 문서. 못 고르면 빈 목록),
+             k (찾아올 조각 수, 보통 config.TOP_K),
+             vector_store (테스트에서 가짜 임베딩으로 연 저장소를 넣는다. 비우면 get_vector_store())
+    넘기는 것: [(Document, 점수), ...] 최대 k개. 점수가 작은(더 비슷한) 조각이 앞에 온다
+               점수는 L2 거리라서 확률이 아니다. 순서를 비교할 때만 쓴다
+    """
+    # 1. 받은 값 확인. 잘못된 값은 Chroma까지 가기 전에 알기 쉬운 오류로 멈춘다
+    if not question.strip():
+        raise ValueError("질문이 비어 있습니다.")
+    if k < 1:
+        raise ValueError(f"k는 1 이상이어야 합니다: {k}")
+
+    # 2. 저장소 열기 (테스트에서는 가짜 임베딩으로 연 저장소가 들어온다)
+    if vector_store is None:
+        vector_store = get_vector_store()
+
+    # 3. 거르기 조건 만들기: project_ids가 있으면 그 문서 조각만, 빈 목록이면 None(전체)
+    project_filter = make_project_filter(project_ids)
+
+    # 4. 질문을 임베딩해서 가장 가까운 조각 k개 찾기 (거리가 작은 순서로 온다)
+    results = vector_store.similarity_search_with_score(question, k=k, filter=project_filter)
+
+    # 5. 0개면 이유를 경고로 남긴다. 4단계는 0개면 "찾은 문서에 없습니다"라고만 답해서
+    #    여기서 이유를 남기지 않으면 저장 문제인지, project_id 문제인지 알 수 없다
+    if len(results) == 0:
+        warn_empty_result(vector_store, project_ids)
+
+    return results
+
+
+def warn_empty_result(vector_store: Chroma, project_ids: list[str]) -> None:
+    """검색 결과가 0개일 때 이유를 찾아 경고로 남긴다. 결과가 0개일 때만 불린다.
+
+    받는 것: 저장소, 검색에 쓴 project_id 목록
+    넘기는 것: 없음 (로그에 경고를 남긴다)
+    """
+    # 1. 저장소가 비어 있으면 build_index.py를 아직 안 돌린 것이다
+    if vector_store._collection.count() == 0:
+        logger.warning("저장소에 조각이 0개입니다. scripts/build_index.py를 먼저 돌려야 합니다.")
+        return
+
+    # 2. 저장소에 없는 project_id 찾기 (띄어쓰기·괄호·확장자 등 글자가 다르면 여기에 나온다)
+    missing_project_ids = [
+        project_id
+        for project_id in project_ids
+        if len(vector_store.get(where={"project_id": project_id}, limit=1)["ids"]) == 0
+    ]
+    logger.warning(
+        "검색 결과가 0개입니다. 저장소에 없는 project_id: %s (글자가 저장된 값과 똑같은지 확인)",
+        missing_project_ids,
+    )
