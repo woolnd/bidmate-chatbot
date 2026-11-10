@@ -16,6 +16,10 @@
 
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()  # .env의 OPENAI_API_KEY 등을 읽는다
+
 # 경로
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_FOLDER = PROJECT_ROOT / "data" / "raw"  # 원본 RFP 파일 (Git에 안 올라간다)
