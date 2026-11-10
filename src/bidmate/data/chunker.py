@@ -31,7 +31,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # ProjectInfo, LoadedDocument의 칸은 11/10에 data_list.csv를 보고 schemas.py에 만든다
+    # ProjectInfo, LoadedDocument의 칸은 schemas.py에 있다 (11/10 확정)
     from bidmate.schemas import LoadedDocument, ProjectInfo
 
 from langchain_core.documents import Document
@@ -53,4 +53,4 @@ def make_info_chunk(project: ProjectInfo) -> Document:
     """목록표 한 줄로 기본 정보 조각 1개를 만든다. 예산·마감일 질문에 쓴다."""
     # TODO 1. page_content = 머리말 + "기본 정보: 발주 기관 … | 예산 …원 | 입찰 마감일 …"
     # TODO 2. metadata = 보통 조각과 같은 키 4개, chunk_id만 "파일이름-info"
-    raise NotImplementedError("ProjectInfo를 schemas.py에 만든 뒤 채운다 (11/10)")
+    raise NotImplementedError("데이터 파트가 채운다")

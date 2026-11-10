@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # ProjectInfo, LoadedDocument의 칸은 11/10에 data_list.csv를 보고 schemas.py에 만든다
+    # ProjectInfo, LoadedDocument의 칸은 schemas.py에 있다 (11/10 확정)
     from bidmate.schemas import LoadedDocument, ProjectInfo
 
 from pathlib import Path
@@ -35,7 +35,7 @@ def load_document(project: ProjectInfo, raw_folder: Path) -> LoadedDocument:
     # TODO 2. .hwp면 extract_hwp_text, .pdf면 extract_pdf_text 부르기
     # TODO 3. clean_text로 정리하기
     # TODO 4. LoadedDocument(project_id, text)에 담아 돌려주기
-    raise NotImplementedError("LoadedDocument를 schemas.py에 만든 뒤 채운다 (11/10)")
+    raise NotImplementedError("데이터 파트가 채운다")
 
 
 def clean_text(text: str) -> str:

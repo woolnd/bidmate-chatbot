@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # ProjectInfo의 칸은 11/10에 data_list.csv를 보고 schemas.py에 만든다
+    # ProjectInfo의 칸은 schemas.py에 있다 (11/10 확정)
     from bidmate.schemas import ProjectInfo
 
 
