@@ -13,6 +13,7 @@
     - AI 채점용 프롬프트는 답변용과 따로 둔다.
 """
 
+from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from bidmate.config import REWRITE_ANSWER_PREVIEW_LENGTH
@@ -76,3 +77,81 @@ def build_rewrite_messages(question: str, recent_history: ChatHistory) -> list[B
     ]
 
     return messages
+
+
+# 4단계 답변 지시문 (고정 부분). 날짜·이름 같은 바뀌는 값을 넣지 않는다.
+# 예시는 지어낸 기관명으로 쓴다. 짧게 시작하고, 평가에서 틀린 경우가 나올 때만 규칙을 하나씩 더한다.
+ANSWER_SYSTEM_PROMPT = """너는 입찰 컨설턴트를 돕는 RFP 분석 도우미다.
+찾은 조각을 읽고 질문에 답한다.
+
+규칙:
+- 찾은 조각에 있는 내용만 쓴다. 조각에 없으면 지어내지 말고 "찾은 문서에 없습니다"라고 쓴다.
+- 질문에 필요한 내용만 짧게 쓴다. 금액·날짜·숫자는 조각에 적힌 그대로 쓴다.
+- 출처에는 답의 근거가 된 조각의 사업명을 쓴다. 근거가 없으면 출처를 비우고 근거 없음으로 한다.
+- 대화 기록은 질문의 뜻을 이해할 때만 쓰고, 답의 근거로 쓰지 않는다.
+
+예시 1)
+찾은 조각:
+[1] 사업명: 통합 이러닝 플랫폼 구축
+[가나다공단 / 통합 이러닝 플랫폼 구축] 사업 예산: 500,000,000원(부가세 포함)
+
+질문: 가나다공단 이러닝 사업 예산은?
+답변: 사업 예산은 500,000,000원(부가세 포함)입니다.
+출처: 통합 이러닝 플랫폼 구축
+근거 있음: 예
+
+예시 2)
+찾은 조각:
+[1] 사업명: 학사 시스템 고도화
+[라마대학교 / 학사 시스템 고도화] 수강신청, 성적 관리, 졸업 심사 기능을 개선한다.
+
+질문: 라마대학교 학사 시스템 사업 제출 서류는?
+답변: 찾은 문서에 없습니다.
+출처: (없음)
+근거 있음: 아니오"""
+
+
+def build_answer_messages(
+    question: str, chunks: list[tuple[Document, float]], recent_history: ChatHistory
+) -> list[BaseMessage]:
+    """4단계 답변용 메시지를 만든다.
+
+    받는 것: 다듬은 질문, 찾은 조각 [(Document, 점수), ...],
+             최근 대화 기록 (이미 최근 3번으로 잘린 것)
+    넘기는 것: [시스템 메시지(고정), 사람 메시지(대화 기록 → 찾은 조각 → 질문)]
+    고정 부분을 앞에, 바뀌는 부분을 뒤에 둔다 (프롬프트 캐싱 규칙).
+    """
+
+    # 1. 대화 기록을 "질문: …" / "답변: …" 줄로 바꾼다. 기록이 없으면 "(없음)" 한 줄
+    #    답변은 앞 200자만 넣는다 (질문의 뜻을 이해할 때만 쓰고 답의 근거로는 쓰지 않으니까)
+    history_lines: list[str] = []
+
+    if len(recent_history) == 0:
+        history_lines.append("(없음)")
+    else:
+        for previous_question, previous_answer in recent_history:
+            answer_preview = previous_answer[:REWRITE_ANSWER_PREVIEW_LENGTH]
+            history_lines.append(f"질문: {previous_question}")
+            history_lines.append(f"답변: {answer_preview}")
+
+    history_text = "\n".join(history_lines)
+
+    # 2. 조각을 "[번호] 사업명: …" + 본문 모양으로 바꾼다 (시스템 프롬프트 예시와 같은 모양)
+    #    사업명이 보여야 AI가 출처(source_project_names)를 고를 수 있다. 점수는 넘기지 않는다
+    chunk_lines: list[str] = []
+
+    for number, (document, score) in enumerate(chunks, start=1):
+        chunk_lines.append(f"[{number}] 사업명: {document.metadata['project_name']}")
+        chunk_lines.append(document.page_content)
+        chunk_lines.append("")  # 조각 사이 빈 줄
+
+    # 마지막 조각 뒤에 붙은 빈 줄은 지운다
+    chunk_text = "\n".join(chunk_lines).strip()
+
+    # 3. 사람 메시지 글 만들기: 대화 기록 → 찾은 조각 → 질문 순서
+    human_message_text = (
+        "대화 기록:\n" + history_text + "\n\n찾은 조각:\n" + chunk_text + "\n\n질문: " + question
+    )
+
+    # 4. 고정 부분(시스템 메시지)을 앞에, 바뀌는 부분(사람 메시지)을 뒤에 둔다 (프롬프트 캐싱)
+    return [SystemMessage(ANSWER_SYSTEM_PROMPT), HumanMessage(human_message_text)]
