@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<!--
+  BidMate 챗봇 화면. 담당: 재웅 (디자인: 재웅 시안)
+  서버(app/server.py, FastAPI)가 이 파일을 "/"로 내려주고, 아래 API로 질문·답을 주고받는다.
+  실제 기관명·사업명은 이 파일에 쓰지 않는다 (공개 레포). 사업 목록·추천 질문은 /api/projects에서 받는다.
+
+  ── 서버와의 약속 (API) ──────────────────────────────────────────────
+  GET  /api/projects   → 200 [{project_id, agency_name, project_name}]      로그인 안 됐으면 401
+  POST /api/login      {password}                → 200 (로그인 쿠키) / 401 (틀림)
+  POST /api/chat       {question, chat_history: [[질문, 답변], ...]}
+                       → 200 {
+                           answer: str, source_project_names: [str], has_evidence: bool,
+                           rewritten_question: str, seconds: float,
+                           chunks: [{chunk_id, project_name, text, score}],
+                           // v0.2 (없으면 그 칸을 안 그린다)
+                           next_questions?: [str],
+                           diagnosis?: {project_name, recommended: [{text, source}], not_recommended: [{text, source}]},
+                           similar_projects?: [{agency_name, project_name, similarity, note}]
+                         }
+                       로그인 안 됐으면 401
+  POST /api/feedback   {question, answer, rating: "up" | "down"}   (v0.2. 실패해도 화면은 그대로)
+  ────────────────────────────────────────────────────────────────────
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BidMate RFP AI 어시스턴트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; font-family: 'Pretendard', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+  body { overscroll-behavior: none; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #e2d9f3; border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #cbbbe9; }
+  .warm-pastel-bg {
+    background-color: #FAF8FD;
+    background-image:
+      radial-gradient(at 0% 0%, rgba(245, 235, 255, 0.7) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(230, 242, 255, 0.6) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(254, 243, 235, 0.5) 0px, transparent 50%);
+  }
+  .glass-card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(16px); }
+  .answer-text { white-space: pre-wrap; }
+  .dot-loading span { animation: blink 1.2s infinite both; }
+  .dot-loading span:nth-child(2) { animation-delay: .2s; }
+  .dot-loading span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
+</style>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          pastel: {
+            violet: '#7C71F2', 'violet-light': '#F3F0FF', 'violet-border': '#E4DCFD',
+            sky: '#4EA8DE', 'sky-light': '#F0F9FF', 'sky-border': '#BAE6FD',
+            mint: '#38B2AC', 'mint-light': '#F0FDF4', 'mint-border': '#BBF7D0',
+            peach: '#E06D53', 'peach-light': '#FFF7ED', 'peach-border': '#FED7AA', cream: '#FEFBF6',
+          },
+        },
+        fontFamily: { sans: ['Pretendard', 'Plus Jakarta Sans', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+        boxShadow: {
+          'pastel-sm': '0 2px 10px rgba(124, 113, 242, 0.05)',
+          'pastel-card': '0 8px 30px rgba(140, 130, 200, 0.07)',
+          'pastel-float': '0 12px 35px -6px rgba(120, 100, 180, 0.12), 0 4px 12px -2px rgba(120, 100, 180, 0.04)',
+          'pastel-glow': '0 4px 18px rgba(124, 113, 242, 0.25)',
+        },
+      },
+    },
+  };
+</script>
+</head>
+<body class="warm-pastel-bg text-slate-700 antialiased min-h-screen selection:bg-purple-100 selection:text-pastel-violet">
+
+<!-- 로그인 화면: /api/projects가 401이면 보인다 -->
+<div id="loginOverlay" class="hidden fixed inset-0 z-[100] warm-pastel-bg flex items-center justify-center p-6">
+  <form id="loginForm" class="glass-card w-full max-w-sm rounded-3xl p-7 border border-[#EFE8F7] shadow-pastel-card flex flex-col gap-4">
+    <div class="flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#7C71F2] to-[#A39BFE] flex items-center justify-center text-white shadow-pastel-glow">
+        <span class="material-symbols-outlined text-[21px]">dataset</span>
+      </div>
+      <div>
+        <div class="font-bold text-slate-800 text-[15px]">BidMate</div>
+        <div class="text-[11.5px] text-slate-400 font-medium">사내 전용 · 비밀번호를 입력하세요</div>
+      </div>
+    </div>
+    <input id="passwordInput" type="password" placeholder="비밀번호" autocomplete="current-password"
+      class="w-full rounded-xl border border-[#DDD5F5] px-4 py-2.5 text-sm focus:border-[#7C71F2] focus:ring-4 focus:ring-[#7C71F2]/15">
+    <p id="loginError" class="hidden text-xs text-rose-500 font-medium">비밀번호가 틀렸습니다.</p>
+    <button type="submit" class="w-full bg-gradient-to-r from-[#7C71F2] via-[#857BF4] to-[#9B92F8] text-white py-2.5 rounded-2xl font-semibold text-sm shadow-pastel-glow">들어가기</button>
+  </form>
+</div>
+
+<!-- 왼쪽 사이드바 -->
+<aside class="fixed left-0 top-0 h-full w-72 bg-white/85 backdrop-blur-xl border-r border-[#EFE9F6] z-50 flex flex-col justify-between py-6 shadow-[4px_0_24px_rgba(150,140,190,0.04)]">
+  <div class="px-5 flex flex-col gap-6">
+    <div class="flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#7C71F2] to-[#A39BFE] flex items-center justify-center text-white shadow-pastel-glow">
+        <span class="material-symbols-outlined text-[21px]">dataset</span>
+      </div>
+      <div>
+        <div class="flex items-center gap-1.5">
+          <span class="font-bold text-slate-800 text-[15px] tracking-tight">BidMate</span>
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-pastel-violet-light text-[#7C71F2] border border-pastel-violet-border">RFP AI</span>
+        </div>
+        <p class="text-[11.5px] text-slate-400 font-medium m-0">공공입찰 RFP 분석 어시스턴트</p>
+      </div>
+    </div>
+
+    <button type="button" onclick="resetChat()"
+      class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#7C71F2] via-[#857BF4] to-[#9B92F8] hover:opacity-95 active:scale-[0.98] text-white py-3 px-4 rounded-2xl font-semibold text-sm shadow-pastel-glow transition-all">
+      <span class="material-symbols-outlined text-lg">add</span><span>새 대화 시작하기</span>
+    </button>
+
+    <div class="bg-gradient-to-br from-[#FAF8FE] to-[#F5F2FB] rounded-2xl p-4 border border-[#ECE5F6] flex flex-col gap-3 shadow-pastel-sm">
+      <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+        <span class="material-symbols-outlined text-base text-[#7C71F2]">tips_and_updates</span><span>질문 활용 팁</span>
+      </div>
+      <ul class="text-[12.5px] text-slate-600 flex flex-col gap-2.5 leading-relaxed m-0 p-0 list-none">
+        <li class="flex items-start gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[#9E92F7] mt-2 shrink-0"></span><span><strong>기관명·사업명</strong>을 넣어 질문하면 더 정확합니다.</span></li>
+        <li class="flex items-start gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[#9E92F7] mt-2 shrink-0"></span><span><strong>RFP 문서</strong>에 있는 내용만으로 답합니다.</span></li>
+        <li class="flex items-start gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[#9E92F7] mt-2 shrink-0"></span><span>답변 아래 <strong>근거 원문 보기</strong>에서 원문을 확인하세요.</span></li>
+      </ul>
+    </div>
+
+    <div class="flex flex-col gap-2 pt-1">
+      <div class="flex items-center justify-between text-xs font-bold text-slate-700">
+        <div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[17px] text-[#7C71F2]">folder_managed</span><span>RFP 사업 목록</span></div>
+        <span id="projectCountPill" class="hidden text-[10px] px-2 py-0.5 rounded-full bg-[#EDFDF5] text-emerald-700 border border-[#C6F6D5] font-medium"></span>
+      </div>
+      <select id="projectSelect" onchange="onProjectSelect(this)"
+        class="w-full bg-white/90 border border-[#DDD5F5] hover:border-[#8C81F5] rounded-xl px-3 py-2 text-xs text-slate-700 font-medium shadow-pastel-sm focus:outline-none focus:ring-2 focus:ring-[#7C71F2]/20 cursor-pointer transition-all">
+        <option value="">사업명 선택 (핵심 요약 질문)</option>
+      </select>
+      <p class="text-[11px] text-slate-400 leading-normal pl-0.5 m-0">선택하면 그 사업의 핵심 요약을 입력창에 넣습니다. 추천/비추천 진단과 유사 사업은 v0.2에서 열립니다.</p>
+    </div>
+  </div>
+
+  <div class="px-5">
+    <div class="p-3.5 rounded-2xl bg-white/90 border border-[#EDE7F6] flex items-center gap-3 shadow-pastel-sm">
+      <div class="relative flex items-center justify-center w-2.5 h-2.5">
+        <span id="statusPing" class="hidden animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-60"></span>
+        <span id="statusDot" class="relative inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
+      </div>
+      <div class="flex flex-col">
+        <span id="statusTitle" class="text-xs font-semibold text-slate-700">서버 연결 중…</span>
+        <span id="statusSub" class="text-[11px] text-slate-400 font-mono">/api/projects</span>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- 가운데 -->
+<div class="pl-72 flex flex-col min-h-screen">
+  <header class="sticky top-0 z-40 h-16 bg-white/70 backdrop-blur-md border-b border-[#EFE9F6] px-8 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <h2 class="text-slate-800 font-bold text-base tracking-tight flex items-center gap-2 m-0">BidMate 공공기관 RFP 챗봇
+        <span class="text-[11px] font-medium text-slate-500 bg-[#F4F0FA] border border-[#E9E3F5] px-2 py-0.5 rounded-full">v0.1</span></h2>
+      <span class="hidden sm:inline-block w-px h-4 bg-purple-100"></span>
+      <div id="headerCount" class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EDFDF5] text-emerald-700 border border-[#C6F6D5] text-xs font-medium">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span id="headerCountText">목록 불러오는 중</span>
+      </div>
+    </div>
+    <button type="button" onclick="resetChat()"
+      class="flex items-center gap-1.5 text-slate-600 hover:text-[#7C71F2] bg-white/90 hover:bg-[#FAF8FE] border border-[#EBE4F5] px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-pastel-sm">
+      <span class="material-symbols-outlined text-[16px]">restart_alt</span><span>대화 초기화</span>
+    </button>
+  </header>
+
+  <main class="flex-1 w-full max-w-4xl mx-auto px-6 pt-7 pb-36 flex flex-col gap-6">
+    <!-- 안내 카드 + 추천 질문 -->
+    <section class="glass-card rounded-3xl p-6 sm:p-7 border border-[#EFE8F7] shadow-pastel-card">
+      <div class="flex items-start gap-4">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#F1EDFD] to-[#E5E0FA] border border-[#DDD5F5] flex items-center justify-center text-[#7C71F2] shrink-0 shadow-sm">
+          <span class="material-symbols-outlined text-[26px]">smart_toy</span>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <h1 class="text-[19px] font-bold text-slate-800 tracking-tight m-0">공공기관 RFP 지식 베이스 검색</h1>
+          <p class="text-sm text-slate-500 leading-relaxed m-0">공공기관 제안요청서(RFP)에서 요구사항, 마감 기한, 참가 자격, 예산을 찾아 문서 출처와 함께 안내합니다.</p>
+        </div>
+      </div>
+      <div class="mt-6 pt-5 border-t border-[#F3EDF9] flex flex-col gap-3">
+        <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+          <svg class="w-4 h-4 text-[#7C71F2] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 2c.2 3.8 2.5 6.1 6.5 6.5-4 .4-6.3 2.7-6.5 6.5-.2-3.8-2.5-6.1-6.5-6.5 4-.4 6.3-2.7 6.5-6.5zm8.5 10c.1 2.3 1.5 3.7 4 4-2.5.3-3.9 1.7-4 4-.1-2.3-1.5-3.7-4-4 2.5-.3 3.9-1.7 4-4z"></path></svg>
+          <span>추천 질문으로 바로 시작하기</span>
+        </div>
+        <div id="suggestionChips" class="flex flex-wrap gap-2.5"></div>
+      </div>
+    </section>
+
+    <!-- 대화 -->
+    <section class="flex flex-col gap-6" id="chatStream"></section>
+  </main>
+
+  <!-- 입력창 -->
+  <div class="fixed bottom-0 left-72 right-0 bg-gradient-to-t from-[#FAF8FD] via-[#FAF8FD]/90 to-transparent pb-6 pt-8 px-6 z-30 flex flex-col items-center pointer-events-none">
+    <div class="w-full max-w-3xl flex flex-col gap-2.5 pointer-events-auto">
+      <div class="bg-white/95 backdrop-blur-md rounded-2xl shadow-pastel-float border border-[#E9E1F5] p-1.5 pl-4 flex items-center gap-2 transition-all focus-within:border-[#7C71F2] focus-within:ring-4 focus-within:ring-[#7C71F2]/15">
+        <svg class="w-5 h-5 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input id="promptInput" type="text" placeholder="공공기관 RFP에 대해 질문하세요... (예: 마감일, 참가자격, 예산)"
+          class="flex-1 bg-transparent border-0 py-2.5 text-slate-700 placeholder:text-slate-400 text-sm focus:outline-none focus:ring-0 font-medium">
+        <div class="hidden sm:flex items-center gap-1 text-[11px] font-mono text-slate-400 bg-[#F6F2FB] px-2 py-1 rounded-md border border-[#EAE3F5]"><span>Enter</span></div>
+        <button id="sendBtn" type="button" onclick="handleSend()" title="질문 전송"
+          class="w-10 h-10 rounded-xl bg-gradient-to-r from-[#7C71F2] to-[#8C82F5] hover:opacity-95 active:scale-95 disabled:opacity-50 text-white flex items-center justify-center shadow-pastel-glow transition-all shrink-0">
+          <span class="material-symbols-outlined text-xl">arrow_upward</span>
+        </button>
+      </div>
+      <div class="flex items-center justify-center gap-1.5 text-slate-500 text-[11.5px] font-medium text-center">
+        <span class="material-symbols-outlined text-[14px] text-emerald-500">lock</span>
+        <span>공공기관 RFP 전용 검색 · 비밀번호로 보호되는 사내 도구</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── 화면이 기억하는 것 ──
+  // chatHistory: 서버에 넘길 대화 기록 [[질문, 답변], ...]. 새로고침하면 사라진다
+  let chatHistory = [];
+  let isWaiting = false;
+
+  const SPARKLE = '<svg class="w-4 h-4 text-[#7C71F2] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 2c.2 3.8 2.5 6.1 6.5 6.5-4 .4-6.3 2.7-6.5 6.5-.2-3.8-2.5-6.1-6.5-6.5 4-.4 6.3-2.7 6.5-6.5zm8.5 10c.1 2.3 1.5 3.7 4 4-2.5.3-3.9 1.7-4 4-.1-2.3-1.5-3.7-4-4 2.5-.3 3.9-1.7 4-4z"></path></svg>';
+  // 추천 질문 칩 색: 보라 · 민트 · 복숭아 · 하늘 (시안 순서)
+  const CHIP_STYLES = [
+    'bg-[#F7F4FD] hover:bg-[#EFEBFC] border-[#E5DEFA] hover:border-[#D1C6F6] hover:text-[#5B4FE3]',
+    'bg-[#F0FDF8] hover:bg-[#E2FAF0] border-[#C6F6E5] hover:border-[#9EEFD4] hover:text-emerald-800',
+    'bg-[#FFF7F2] hover:bg-[#FEEFE6] border-[#FEDDC7] hover:border-[#FDCBAA] hover:text-orange-900',
+    'bg-[#F0F9FF] hover:bg-[#E0F2FE] border-[#BAE6FD] hover:border-[#7DD3FC] hover:text-sky-900',
+  ];
+  // 추천 질문 틀. {name} = "기관명 사업명" (실제 이름은 서버 목록에서 채운다)
+  const SUGGESTION_TEMPLATES = ['{name} 요구사항 정리해 줘', '{name} 예산과 입찰 마감일은?', '{name} 참가 자격은?'];
+  const FOLLOW_UP_SUGGESTION = '그럼 제출 방식은?';
+
+  function escapeHtml(text) {
+    return String(text ?? '').replace(/[&<>"'`=\/]/g, (character) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '/': '&#x2F;', '`': '&#x60;', '=': '&#x3D;',
+    })[character]);
+  }
+
+  function timeLabel() {
+    const now = new Date();
+    const hour = now.getHours();
+    return `${hour < 12 ? '오전' : '오후'} ${hour % 12 || 12}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function scrollToBottom() {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  }
+
+  function insertPrompt(text) {
+    const input = document.getElementById('promptInput');
+    input.value = text;
+    input.focus();
+  }
+
+  function resetChat() {
+    chatHistory = [];
+    document.getElementById('chatStream').innerHTML = '';
+    document.getElementById('promptInput').value = '';
+  }
+
+  // ── 1. 처음 열 때: 사업 목록을 받아 사이드바·추천 질문을 채운다 (401이면 로그인 화면) ──
+  async function loadProjects() {
+    let response;
+    try {
+      response = await fetch('/api/projects');
+    } catch (error) {
+      setStatus(false, '서버에 연결할 수 없습니다', '서버가 켜져 있는지 확인하세요');
+      renderSuggestions([]);
+      return;
+    }
+    if (response.status === 401) {
+      document.getElementById('loginOverlay').classList.remove('hidden');
+      document.getElementById('passwordInput').focus();
+      return;
+    }
+    const projects = response.ok ? await response.json() : [];
+    renderProjects(projects);
+    renderSuggestions(projects);
+  }
+
+  function setStatus(isOk, title, sub) {
+    document.getElementById('statusDot').className = `relative inline-flex rounded-full h-2 w-2 ${isOk ? 'bg-emerald-400' : 'bg-slate-300'}`;
+    document.getElementById('statusPing').classList.toggle('hidden', !isOk);
+    document.getElementById('statusTitle').textContent = title;
+    document.getElementById('statusSub').textContent = sub;
+  }
+
+  function renderProjects(projects) {
+    const select = document.getElementById('projectSelect');
+    for (const project of projects) {
+      const option = document.createElement('option');
+      option.value = `${project.agency_name} ${project.project_name}`;
+      option.textContent = option.value;
+      select.appendChild(option);
+    }
+    const count = projects.length;
+    const pill = document.getElementById('projectCountPill');
+    pill.textContent = `${count}개`;
+    pill.classList.toggle('hidden', count === 0);
+    document.getElementById('headerCountText').textContent = count ? `${count}건 목록표` : '목록표 없음';
+    setStatus(count > 0, count ? `RFP ${count}건 목록표` : 'RFP 목록표 없음', count ? '목록표 읽기 완료' : 'data/raw/data_list.csv');
+  }
+
+  function renderSuggestions(projects) {
+    const suggestions = projects.slice(0, SUGGESTION_TEMPLATES.length).map(
+      (project, index) => SUGGESTION_TEMPLATES[index].replace('{name}', `${project.agency_name} ${project.project_name}`),
+    );
+    suggestions.push(FOLLOW_UP_SUGGESTION);
+    document.getElementById('suggestionChips').innerHTML = suggestions.map((text, index) => `
+      <button type="button" data-prompt="${escapeHtml(text)}"
+        class="group flex items-center gap-2 px-3.5 py-2 rounded-xl border text-slate-700 text-xs font-medium transition-all shadow-2xs hover:-translate-y-0.5 ${CHIP_STYLES[index % CHIP_STYLES.length]}">
+        ${SPARKLE}<span>${escapeHtml(text)}</span>
+      </button>`).join('');
+  }
+
+  function onProjectSelect(select) {
+    if (select.value) insertPrompt(`${select.value} 핵심 요약해 줘`);
+  }
+
+  // ── 2. 로그인 ──
+  document.getElementById('loginForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const password = document.getElementById('passwordInput').value;
+    const response = await fetch('/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }),
+    });
+    if (response.ok) {
+      document.getElementById('loginOverlay').classList.add('hidden');
+      loadProjects();
+    } else {
+      document.getElementById('loginError').classList.remove('hidden');
+    }
+  });
+
+  // ── 3. 질문 보내기 → 답 그리기 ──
+  async function handleSend() {
+    const input = document.getElementById('promptInput');
+    const question = input.value.trim();
+    if (!question || isWaiting) return;
+    input.value = '';
+    isWaiting = true;
+    document.getElementById('sendBtn').disabled = true;
+
+    const stream = document.getElementById('chatStream');
+    stream.insertAdjacentHTML('beforeend', userBubbleHtml(question));
+    const loading = document.createElement('article');
+    loading.innerHTML = loadingHtml();
+    stream.appendChild(loading);
+    scrollToBottom();
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, chat_history: chatHistory }),
+      });
+      if (response.status === 401) {
+        loading.remove();
+        document.getElementById('loginOverlay').classList.remove('hidden');
+        return;
+      }
+      if (!response.ok) throw new Error(`서버 오류 ${response.status}`);
+      const result = await response.json();
+      loading.outerHTML = answerCardHtml(question, result);
+      chatHistory.push([question, result.answer]);
+    } catch (error) {
+      loading.outerHTML = errorHtml(error.message);
+    } finally {
+      isWaiting = false;
+      document.getElementById('sendBtn').disabled = false;
+      input.focus();
+      scrollToBottom();
+    }
+  }
+
+  function userBubbleHtml(question) {
+    return `
+      <article class="flex justify-end items-end gap-3 pl-12">
+        <div class="flex flex-col items-end gap-1.5 max-w-xl">
+          <div class="bg-gradient-to-r from-[#6E62EE] to-[#8075F3] text-white font-medium text-[15px] px-5 py-3.5 rounded-3xl rounded-br-md shadow-[0_6px_20px_rgba(110,98,238,0.22)] leading-relaxed">${escapeHtml(question)}</div>
+          <span class="text-[11px] text-slate-400 pr-1">${timeLabel()}</span>
+        </div>
+        <div class="w-8 h-8 rounded-full bg-[#EAE4F7] border border-[#DDD5F2] text-[#6E62EE] flex items-center justify-center font-bold text-xs shrink-0">나</div>
+      </article>`;
+  }
+
+  function botAvatarHtml() {
+    return `<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-[#7C71F2] to-[#998FFA] text-white flex items-center justify-center shrink-0 shadow-pastel-glow mt-1">
+      <span class="material-symbols-outlined text-[18px]">smart_toy</span></div>`;
+  }
+
+  function loadingHtml() {
+    return `
+      <div class="flex justify-start items-start gap-3 pr-4">
+        ${botAvatarHtml()}
+        <div class="bg-white rounded-3xl rounded-tl-md px-6 py-4 border border-[#EFE8F7] shadow-pastel-card text-sm text-slate-500 flex items-center gap-2">
+          문서에서 찾는 중 <span class="dot-loading font-bold text-[#7C71F2]"><span>·</span><span>·</span><span>·</span></span>
+        </div>
+      </div>`;
+  }
+
+  function errorHtml(message) {
+    return `
+      <article class="flex justify-start items-start gap-3 pr-4">
+        ${botAvatarHtml()}
+        <div class="bg-[#FFF4EE] rounded-3xl rounded-tl-md px-6 py-4 border border-[#FDDCC7] text-sm text-[#C8563C] font-semibold">
+          답을 받지 못했습니다 (${escapeHtml(message)}). 잠시 뒤 다시 질문해 주세요.
+        </div>
+      </article>`;
+  }
+
+  function answerCardHtml(question, result) {
+    const sources = (result.source_project_names || []).map((name) => `
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#F5F2FD] text-[#695CE5] border border-[#E0D7FA] text-xs font-mono font-medium">
+        <span class="material-symbols-outlined text-sm text-[#7C71F2]">verified</span><span>${escapeHtml(name)}</span>
+      </span>`).join('');
+
+    const noEvidence = result.has_evidence ? '' : `
+      <div class="flex items-start gap-2.5 text-[#C8563C] font-semibold bg-[#FFF4EE] p-3 rounded-xl border border-[#FDDCC7] text-sm">
+        <span class="material-symbols-outlined text-[19px] text-[#E06D53] shrink-0">info</span>
+        <span>찾은 문서에서 근거를 찾지 못했습니다. 기관명·사업명을 넣어 다시 물어보세요.</span>
+      </div>`;
+
+    const chunks = result.chunks || [];
+    const evidence = chunks.length === 0 ? '' : `
+      <details class="group bg-[#FAF8FE] rounded-2xl border border-[#EAE3F5] overflow-hidden">
+        <summary class="cursor-pointer list-none flex items-center justify-between p-3.5 select-none hover:bg-[#F3EEFA] transition-colors text-xs font-semibold text-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-[#7C71F2] group-open:rotate-90 transition-transform text-lg">chevron_right</span>
+            <span>근거 원문 보기 (${chunks.length}건)</span>
+          </div>
+          <span class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-white border border-[#E2DAF1] text-slate-500">RAG 추출 본문</span>
+        </summary>
+        <div class="p-3.5 pt-1.5 flex flex-col gap-2.5 border-t border-[#EAE3F5]">
+          ${chunks.map((chunk, index) => `
+            <div class="bg-white p-3.5 rounded-xl border border-[#EFE8F7]">
+              <div class="flex items-center justify-between mb-1.5 gap-2">
+                <span class="font-mono text-[11px] font-bold text-[#7C71F2]"># 근거 조각 ${index + 1} · ${escapeHtml(chunk.chunk_id)}</span>
+                <span class="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 font-medium whitespace-nowrap">거리 ${Number(chunk.score).toFixed(3)} (작을수록 가까움)</span>
+              </div>
+              <blockquote class="m-0 text-xs text-slate-600 leading-relaxed font-mono pl-3 border-l-2 border-[#8C81F5] bg-[#FAF8FE] py-1.5 rounded-r whitespace-pre-wrap">${escapeHtml(chunk.text)}</blockquote>
+            </div>`).join('')}
+        </div>
+      </details>`;
+
+    const answerId = `answer-${Date.now()}`;
+    return `
+      <article class="flex justify-start items-start gap-3 pr-4">
+        ${botAvatarHtml()}
+        <div class="flex flex-col gap-2 w-full max-w-2xl">
+          <div class="bg-white rounded-3xl rounded-tl-md p-6 sm:p-7 border border-[#EFE8F7] shadow-pastel-card flex flex-col gap-4 text-slate-800">
+            <p id="${answerId}" class="answer-text text-[15px] leading-relaxed text-slate-800 font-medium m-0">${escapeHtml(result.answer)}</p>
+            ${noEvidence}
+            ${sources ? `<div class="flex flex-wrap items-center gap-2 pt-0.5">${sources}</div>` : ''}
+            ${evidence}
+            ${agentSectionsHtml(result)}
+            <div class="flex items-center justify-between pt-2 border-t border-[#F3EDF9] text-xs text-slate-400">
+              <span class="text-[11.5px]">이 답변이 공공기관 RFP 분석에 유용했나요? · ${Number(result.seconds || 0).toFixed(1)}초</span>
+              <div class="flex items-center gap-1.5" data-question="${escapeHtml(question)}" data-answer-id="${answerId}">
+                <button type="button" title="도움됨" data-rating="up" class="feedback-button p-1.5 rounded-lg hover:bg-[#F3EEFA] text-slate-400 hover:text-[#7C71F2] transition-colors flex items-center">
+                  <span class="material-symbols-outlined text-[17px]">thumb_up</span></button>
+                <button type="button" title="부정확함" data-rating="down" class="feedback-button p-1.5 rounded-lg hover:bg-[#F3EEFA] text-slate-400 hover:text-rose-500 transition-colors flex items-center">
+                  <span class="material-symbols-outlined text-[17px]">thumb_down</span></button>
+                <div class="h-3 w-px bg-purple-100 mx-1"></div>
+                <button type="button" title="답변 복사" data-copy="${answerId}" class="p-1.5 rounded-lg hover:bg-[#F3EEFA] text-slate-400 hover:text-slate-700 transition-colors">
+                  <span class="material-symbols-outlined text-[17px]">content_copy</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  // v0.2 에이전트 칸: 서버가 값을 주면 그린다 (없으면 빈 문자열)
+  function agentSectionsHtml(result) {
+    let sectionsHtml = '';
+    const diagnosis = result.diagnosis;
+    if (diagnosis) {
+      const listHtml = (items, dotColor, badgeClass) => (items || []).map((item) => `
+        <li class="flex items-start gap-1.5"><span class="w-1.5 h-1.5 rounded-full ${dotColor} mt-1.5 shrink-0"></span>
+          <span>${escapeHtml(item.text)} <span class="font-mono text-[10px] ${badgeClass} bg-white/80 px-1.5 py-0.5 rounded border">출처: ${escapeHtml(item.source)}</span></span></li>`).join('');
+      sectionsHtml += `
+        <div class="bg-gradient-to-br from-[#FAF8FE] to-[#F5F2FB] rounded-2xl p-4 sm:p-5 border border-[#ECE5F6] flex flex-col gap-3.5 shadow-pastel-sm">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-xl bg-white text-[#7C71F2] border border-[#DDD5F5] flex items-center justify-center"><span class="material-symbols-outlined text-[17px]">analytics</span></span>
+            <span class="text-xs font-bold text-slate-800">${escapeHtml(diagnosis.project_name)}</span>
+            <span class="text-[10px] px-2 rounded-full bg-white text-[#7C71F2] border border-[#DDD5F5] font-semibold">진단 카드</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="bg-[#F0FDF8] rounded-xl p-3.5 border border-[#C6F6E5] flex flex-col gap-2.5">
+              <div class="flex items-center gap-1.5 text-xs font-bold text-emerald-700"><span class="material-symbols-outlined text-base text-emerald-600">thumb_up</span><span>이런 회사에 추천합니다</span></div>
+              <ul class="text-[12px] text-slate-700 flex flex-col gap-2 leading-relaxed m-0 p-0 list-none">${listHtml(diagnosis.recommended, 'bg-emerald-500', 'text-emerald-700 border-[#C6F6E5]')}</ul>
+            </div>
+            <div class="bg-[#FFF7F2] rounded-xl p-3.5 border border-[#FEDDC7] flex flex-col gap-2.5">
+              <div class="flex items-center gap-1.5 text-xs font-bold text-[#C8563C]"><span class="material-symbols-outlined text-base text-[#E06D53]">thumb_down</span><span>이런 회사엔 신중을 권합니다</span></div>
+              <ul class="text-[12px] text-slate-700 flex flex-col gap-2 leading-relaxed m-0 p-0 list-none">${listHtml(diagnosis.not_recommended, 'bg-[#E06D53]', 'text-[#C8563C] border-[#FEDDC7]')}</ul>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-slate-400 bg-white/80 px-3 py-1.5 rounded-lg border border-[#EDE7F6]">
+            <span class="material-symbols-outlined text-xs text-slate-400">info</span>
+            <span>참고용 정리입니다. 최종 입찰 참여 결정은 컨설턴트가 공고문 최종본을 확인 후 판단하세요.</span>
+          </div>
+        </div>`;
+    }
+    const similarProjects = result.similar_projects || [];
+    if (similarProjects.length) {
+      sectionsHtml += `
+        <div class="flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700"><span class="material-symbols-outlined text-sm text-[#7C71F2]">saved_search</span><span>이 사업과 비슷한 RFP</span></div>
+            <span class="text-[11px] text-slate-400 font-mono">Top ${similarProjects.length}</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            ${similarProjects.map((project) => `
+              <button type="button" data-prompt="${escapeHtml(`${project.agency_name} ${project.project_name} 핵심 요약해 줘`)}"
+                class="group text-left p-3 rounded-2xl bg-white hover:bg-[#FAF8FE] border border-[#E9E1F5] hover:border-[#8C81F5] transition-all shadow-pastel-sm hover:-translate-y-0.5 flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-semibold text-emerald-700 bg-[#EDFDF5] border border-[#C6F6D5] px-2 py-0.5 rounded-full">유사도 ${Math.round(Number(project.similarity) * 100)}%</span>
+                  <span class="material-symbols-outlined text-xs text-slate-400 group-hover:text-[#7C71F2]">arrow_forward</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-slate-800 line-clamp-1 group-hover:text-[#5B4FE3]">${escapeHtml(project.agency_name)}</span>
+                  <span class="text-[11.5px] text-slate-600 line-clamp-2 leading-snug mt-0.5">${escapeHtml(project.project_name)}</span>
+                </div>
+                ${project.note ? `<div class="pt-1 border-t border-[#F3EDF9] text-[10px] text-slate-400 font-mono">${escapeHtml(project.note)}</div>` : ''}
+              </button>`).join('')}
+          </div>
+        </div>`;
+    }
+    const nextQuestions = result.next_questions || [];
+    if (nextQuestions.length) {
+      sectionsHtml += `
+        <div class="flex flex-col gap-2 pt-1">
+          <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-500"><span class="material-symbols-outlined text-sm text-[#7C71F2]">quickreply</span><span>다음 질문 추천</span></div>
+          <div class="flex flex-wrap gap-2">
+            ${nextQuestions.map((text) => `
+              <button type="button" data-prompt="${escapeHtml(text)}"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FAF8FE] hover:bg-[#F3EEFA] border border-[#E5DEFA] hover:border-[#8C81F5] text-slate-700 hover:text-[#5B4FE3] text-xs font-medium transition-all hover:-translate-y-0.5">
+                <span>${escapeHtml(text)}</span></button>`).join('')}
+          </div>
+        </div>`;
+    }
+    return sectionsHtml ? `<div class="flex flex-col gap-4 mt-2 pt-2 border-t border-[#F3EDF9]">${sectionsHtml}</div>` : '';
+  }
+
+  // ── 4. 버튼 클릭 한곳에서 처리: 추천 질문 · 좋아요/별로예요 · 복사 ──
+  document.addEventListener('click', (event) => {
+    const promptButton = event.target.closest('[data-prompt]');
+    if (promptButton) {
+      insertPrompt(promptButton.dataset.prompt);
+      return;
+    }
+    const feedbackButton = event.target.closest('.feedback-button');
+    if (feedbackButton) {
+      const group = feedbackButton.parentElement;
+      group.querySelectorAll('.feedback-button').forEach((button) => button.classList.remove('text-[#7C71F2]', 'text-rose-500'));
+      feedbackButton.classList.add(feedbackButton.dataset.rating === 'up' ? 'text-[#7C71F2]' : 'text-rose-500');
+      const answer = document.getElementById(group.dataset.answerId)?.textContent || '';
+      // v0.2: 서버가 로그에 남긴다. 아직 없으면 실패해도 무시한다
+      fetch('/api/feedback', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: group.dataset.question, answer, rating: feedbackButton.dataset.rating }),
+      }).catch(() => {});
+      return;
+    }
+    const copyButton = event.target.closest('[data-copy]');
+    if (copyButton) {
+      navigator.clipboard?.writeText(document.getElementById(copyButton.dataset.copy)?.textContent || '');
+    }
+  });
+
+  document.getElementById('promptInput').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault();
+      handleSend();
+    }
+  });
+
+  loadProjects();
+</script>
+</body>
+</html>
