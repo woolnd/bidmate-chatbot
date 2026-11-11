@@ -20,13 +20,19 @@ hwp와 pdf 결과를 같은 형식(LoadedDocument)으로 맞춰서
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+from bidmate.data.hwp_loader import extract_hwp_text
+from bidmate.data.pdf_loader import extract_pdf_text
+from bidmate.schemas import LoadedDocument, ProjectInfo
 
 if TYPE_CHECKING:
     # ProjectInfo, LoadedDocument의 칸은 schemas.py에 있다 (11/10 확정)
     from bidmate.schemas import LoadedDocument, ProjectInfo
 
-from pathlib import Path
+
 
 
 def load_document(project: ProjectInfo, raw_folder: Path) -> LoadedDocument:
@@ -35,11 +41,36 @@ def load_document(project: ProjectInfo, raw_folder: Path) -> LoadedDocument:
     # TODO 2. .hwp면 extract_hwp_text, .pdf면 extract_pdf_text 부르기
     # TODO 3. clean_text로 정리하기
     # TODO 4. LoadedDocument(project_id, text)에 담아 돌려주기
-    raise NotImplementedError("데이터 파트가 채운다")
+
+    file_path = raw_folder / project.project_id
+
+    if not file_path.is_file():
+        raise FileNotFoundError(f"파일을 찾을 수 없습니다: {file_path}")
+
+    file_type = file_path.suffix.lower()
+
+    if file_type == ".pdf":
+        raw_text = extract_pdf_text(file_path)
+    elif file_type == ".hwp":
+        raw_text = extract_hwp_text(file_path)
+    else:
+        raise ValueError(f"지원하지 않는 파일 형식: {file_type}")
+
+    cleaned_text = clean_text(raw_text)
+
+    return LoadedDocument(
+        project_id=project.project_id,
+        text=cleaned_text,
+    )
 
 
 def clean_text(text: str) -> str:
     """쓸데없는 공백·머리말·쪽번호를 지운다."""
     # TODO 1주차: 연속 공백 줄이기만
     # TODO 2주차: 머리말·꼬리말, 쪽번호 지우기
+    
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text

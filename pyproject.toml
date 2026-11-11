@@ -19,6 +19,8 @@ dependencies = [
     "python-dotenv>=1.0",
     # 화면
     "streamlit>=1.40",
+    "pymupdf>=2.1",
+    "syhwp>=0.0.8",
 ]
 
 [dependency-groups]
