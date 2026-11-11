@@ -17,19 +17,48 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    # ProjectInfo, LoadedDocument의 칸은 schemas.py에 있다 (11/10 확정)
-    from bidmate.schemas import ProjectInfo
-
 from pathlib import Path
+
+import pandas as pd
+
+from bidmate.schemas import ProjectInfo
+
+
+def _to_budget(value: str | None) -> int | None:
+    """'130000000.0' 같은 금액을 정수로 바꾼다. 비어 있거나 0이면 None (0원이 아니라 정보 없음)."""
+    if pd.isna(value):
+        return None
+    return int(float(value)) or None
+
+
+def _to_date(value: str | None) -> str | None:
+    """'2024-10-04 13:51:23' → '2024-10-04'. 비어 있으면 None."""
+    if pd.isna(value):
+        return None
+    return pd.to_datetime(value).strftime("%Y-%m-%d")
 
 
 def load_project_list(csv_path: Path) -> list[ProjectInfo]:
     """목록표를 읽어 문서 100개의 정보를 돌려준다."""
-    # TODO 1. csv 읽기 (pandas를 쓰면 편하다)
-    # TODO 2. 예산은 숫자로, 날짜는 "2024-05-31" 모양으로 맞추기
-    # TODO 3. 원본 파일이 data/raw/에 다 있는지 확인. 없는 파일은 이름 출력
-    # TODO 4. 한 줄씩 ProjectInfo로 바꿔서 목록으로 돌려주기
-    return []
+    # 1. csv 읽기: BOM이 있어서 utf-8-sig, 값은 전부 문자열로 읽고 아래에서 직접 바꾼다
+    table = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
+
+    # 2. 원본 파일이 목록표와 같은 폴더(data/raw/)에 다 있는지 확인. 없는 파일은 이름 출력
+    raw_folder = csv_path.parent
+    missing_files = [name for name in table["파일명"] if not (raw_folder / name).exists()]
+    if missing_files:
+        print(f"[경고] {raw_folder}에 없는 파일 {len(missing_files)}개:")
+        for name in missing_files:
+            print("  -", name)
+
+    # 3. 예산은 숫자로, 날짜는 "2024-05-31" 모양으로 맞추며 한 줄씩 ProjectInfo로 바꾼다
+    return [
+        ProjectInfo(
+            project_id=row["파일명"],
+            agency_name=row["발주 기관"].strip(),
+            project_name=row["사업명"].strip(),
+            budget=_to_budget(row["사업 금액"]),
+            deadline=_to_date(row["입찰 참여 마감일"]),
+        )
+        for _, row in table.iterrows()
+    ]
