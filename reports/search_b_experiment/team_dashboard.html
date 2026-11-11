@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search-B A/B 실험 결과</title>
+<style>
+:root {
+  --bg:#f4f6fa; --panel:#fff; --text:#202938; --muted:#667085;
+  --line:#e5e9f0; --a:#8492a6; --b:#3269d5;
+  --green:#16845b; --red:#c34c4c; --soft:#edf3ff;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",
+  "Malgun Gothic",sans-serif; line-height:1.6;
+}
+main { max-width:1200px; margin:0 auto; padding:36px 22px 70px; }
+header {
+  background:#17243a; color:white; padding:34px;
+  border-radius:18px; margin-bottom:24px;
+}
+header h1 { margin:0 0 8px; font-size:30px; }
+header p { margin:0; color:#d1d9e6; }
+.meta { margin-top:18px; font-size:13px; color:#c2ccda; }
+section {
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:15px; padding:24px; margin:20px 0;
+}
+h2 { margin:0 0 8px; font-size:21px; }
+.subtitle { margin:0 0 20px; color:var(--muted); font-size:14px; }
+.metric-grid {
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px;
+}
+.metric-card {
+  border:1px solid var(--line); border-radius:12px; padding:18px;
+  background:#fff;
+}
+.metric-name { font-weight:700; font-size:14px; }
+.metric-values { display:flex; align-items:center; gap:9px; margin-top:8px; }
+.metric-values span { font-size:25px; font-weight:750; }
+.a-value { color:var(--a); }
+.b-value { color:var(--b); }
+.arrow { color:#98a2b3; }
+.metric-delta { color:var(--green); font-weight:700; font-size:14px; }
+.metric-card p { color:var(--muted); font-size:12px; margin:7px 0 0; }
+.legend { display:flex; gap:18px; margin:12px 0 20px; font-size:13px; }
+.legend span::before {
+  content:""; display:inline-block; width:10px; height:10px;
+  border-radius:3px; margin-right:7px; background:var(--a);
+}
+.legend .legend-b::before { background:var(--b); }
+.chart-row { padding:12px 0; border-bottom:1px solid var(--line); }
+.chart-label { font-weight:700; margin-bottom:7px; }
+.bar-line { display:grid; grid-template-columns:20px 1fr 48px; gap:10px;
+  align-items:center; margin:5px 0; font-size:13px; }
+.bar-name { color:var(--muted); }
+.bar-track,.count-track { height:13px; background:#edf0f4; border-radius:20px; overflow:hidden; }
+.bar { height:100%; border-radius:20px; }
+.a-bar { background:var(--a); }
+.b-bar { background:var(--b); }
+.bar-line b { text-align:right; font-variant-numeric:tabular-nums; }
+.count-row {
+  display:grid; grid-template-columns:50px 1fr; gap:14px;
+  padding:12px 0; border-bottom:1px solid var(--line);
+}
+.count-bars { display:grid; gap:7px; }
+.count-line { display:grid; grid-template-columns:20px 1fr 25px;
+  align-items:center; gap:9px; font-size:13px; }
+.count-fill { height:100%; border-radius:20px; }
+.callout {
+  border-left:4px solid var(--red); background:#fff5f4;
+  padding:17px 19px; border-radius:8px; margin-top:14px;
+}
+.callout strong { color:#a83232; }
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th,td { padding:11px 10px; border-bottom:1px solid var(--line);
+  text-align:left; vertical-align:top; }
+th { background:#f7f8fb; white-space:nowrap; }
+.question-cell { min-width:230px; }
+.id-cell { min-width:150px; overflow-wrap:anywhere; }
+.critical-row { background:#fff4f2; }
+.issue-row { background:#fffaf0; }
+.status {
+  display:inline-block; padding:3px 9px; border-radius:20px;
+  background:#e8f6ef; color:#14764f; font-weight:700; white-space:nowrap;
+}
+code { color:#475467; overflow-wrap:anywhere; }
+.steps { padding-left:20px; }
+.steps li { margin:8px 0; }
+footer { color:var(--muted); font-size:12px; text-align:center; padding:20px; }
+@media(max-width:760px) {
+  main { padding:16px 12px 40px; }
+  header { padding:24px 20px; }
+  header h1 { font-size:24px; }
+  .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  section { padding:18px 14px; }
+}
+@media(max-width:440px) {
+  .metric-grid { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Search-B A/B 실험 결과</h1>
+  <p>기존 검색 방식(A)과 기관 후보 확장 방식(B)의 검색 성능 비교</p>
+  <div class="meta">실험 기준일: 2026-11-11 · 프로젝트 100개 · 벤치마크 질문 20개</div>
+</header>
+
+<section>
+  <h2>1. 핵심 성과</h2>
+  <p class="subtitle">A는 기존 검색, B는 기관 후보 확장 전략을 적용한 검색 결과입니다.</p>
+  <div class="metric-grid">
+            <article class="metric-card">
+              <div class="metric-name">Top-1 Accuracy</div>
+              <div class="metric-values">
+                <span class="a-value">0.842</span>
+                <span class="arrow">→</span>
+                <span class="b-value">0.947</span>
+              </div>
+              <div class="metric-delta">+10.5%p</div>
+              <p>질문별 최상위 검색 결과의 정답률</p>
+            </article>
+
+
+            <article class="metric-card">
+              <div class="metric-name">Precision</div>
+              <div class="metric-values">
+                <span class="a-value">0.941</span>
+                <span class="arrow">→</span>
+                <span class="b-value">0.947</span>
+              </div>
+              <div class="metric-delta">+0.6%p</div>
+              <p>검색 결과 중 정답 문서의 비율</p>
+            </article>
+
+
+            <article class="metric-card">
+              <div class="metric-name">Recall</div>
+              <div class="metric-values">
+                <span class="a-value">0.842</span>
+                <span class="arrow">→</span>
+                <span class="b-value">0.947</span>
+              </div>
+              <div class="metric-delta">+10.5%p</div>
+              <p>찾아야 할 정답 문서를 찾아낸 비율</p>
+            </article>
+
+
+            <article class="metric-card">
+              <div class="metric-name">F1</div>
+              <div class="metric-values">
+                <span class="a-value">0.889</span>
+                <span class="arrow">→</span>
+                <span class="b-value">0.947</span>
+              </div>
+              <div class="metric-delta">+5.8%p</div>
+              <p>Precision과 Recall의 조화 평균</p>
+            </article>
+
+
+            <article class="metric-card">
+              <div class="metric-name">Precision@3</div>
+              <div class="metric-values">
+                <span class="a-value">0.314</span>
+                <span class="arrow">→</span>
+                <span class="b-value">0.353</span>
+              </div>
+              <div class="metric-delta">+3.9%p</div>
+              <p>상위 3개 결과의 평균 정밀도</p>
+            </article>
+
+
+            <article class="metric-card">
+              <div class="metric-name">Mean Recall</div>
+              <div class="metric-values">
+                <span class="a-value">0.824</span>
+                <span class="arrow">→</span>
+                <span class="b-value">0.941</span>
+              </div>
+              <div class="metric-delta">+11.7%p</div>
+              <p>정답이 있는 질문별 Recall 평균</p>
+            </article>
+            </div>
+  <p class="subtitle" style="margin-top:18px">
+    평가 가능 질문 20개 기준 · 전체 20개 중 진단 전용 질문 1개 제외
+  </p>
+</section>
+
+<section>
+  <h2>2. A/B 성능 비교</h2>
+  <p class="subtitle">막대 길이는 각 지표의 0~1 범위를 나타냅니다.</p>
+  <div class="legend"><span>A 기존 검색</span><span class="legend-b">B 기관 후보 확장</span></div>
+
+            <div class="chart-row">
+              <div class="chart-label">Top-1 Accuracy</div>
+              <div class="bar-line">
+                <span class="bar-name">A</span>
+                <div class="bar-track">
+                  <div class="bar a-bar" style="width:84.2%"></div>
+                </div>
+                <b>0.842</b>
+              </div>
+              <div class="bar-line">
+                <span class="bar-name">B</span>
+                <div class="bar-track">
+                  <div class="bar b-bar" style="width:94.7%"></div>
+                </div>
+                <b>0.947</b>
+              </div>
+            </div>
+
+
+            <div class="chart-row">
+              <div class="chart-label">Precision</div>
+              <div class="bar-line">
+                <span class="bar-name">A</span>
+                <div class="bar-track">
+                  <div class="bar a-bar" style="width:94.1%"></div>
+                </div>
+                <b>0.941</b>
+              </div>
+              <div class="bar-line">
+                <span class="bar-name">B</span>
+                <div class="bar-track">
+                  <div class="bar b-bar" style="width:94.7%"></div>
+                </div>
+                <b>0.947</b>
+              </div>
+            </div>
+
+
+            <div class="chart-row">
+              <div class="chart-label">Recall</div>
+              <div class="bar-line">
+                <span class="bar-name">A</span>
+                <div class="bar-track">
+                  <div class="bar a-bar" style="width:84.2%"></div>
+                </div>
+                <b>0.842</b>
+              </div>
+              <div class="bar-line">
+                <span class="bar-name">B</span>
+                <div class="bar-track">
+                  <div class="bar b-bar" style="width:94.7%"></div>
+                </div>
+                <b>0.947</b>
+              </div>
+            </div>
+
+
+            <div class="chart-row">
+              <div class="chart-label">F1</div>
+              <div class="bar-line">
+                <span class="bar-name">A</span>
+                <div class="bar-track">
+                  <div class="bar a-bar" style="width:88.9%"></div>
+                </div>
+                <b>0.889</b>
+              </div>
+              <div class="bar-line">
+                <span class="bar-name">B</span>
+                <div class="bar-track">
+                  <div class="bar b-bar" style="width:94.7%"></div>
+                </div>
+                <b>0.947</b>
+              </div>
+            </div>
+
+
+            <div class="chart-row">
+              <div class="chart-label">Precision@3</div>
+              <div class="bar-line">
+                <span class="bar-name">A</span>
+                <div class="bar-track">
+                  <div class="bar a-bar" style="width:31.4%"></div>
+                </div>
+                <b>0.314</b>
+              </div>
+              <div class="bar-line">
+                <span class="bar-name">B</span>
+                <div class="bar-track">
+                  <div class="bar b-bar" style="width:35.3%"></div>
+                </div>
+                <b>0.353</b>
+              </div>
+            </div>
+
+
+            <div class="chart-row">
+              <div class="chart-label">Mean Recall</div>
+              <div class="bar-line">
+                <span class="bar-name">A</span>
+                <div class="bar-track">
+                  <div class="bar a-bar" style="width:82.4%"></div>
+                </div>
+                <b>0.824</b>
+              </div>
+              <div class="bar-line">
+                <span class="bar-name">B</span>
+                <div class="bar-track">
+                  <div class="bar b-bar" style="width:94.1%"></div>
+                </div>
+                <b>0.941</b>
+              </div>
+            </div>
+
+</section>
+
+<section>
+  <h2>3. 정답·오답 건수 비교</h2>
+  <p class="subtitle">TP는 정답 검색, FP는 오검색, FN은 정답 문서 누락입니다.</p>
+
+            <div class="count-row">
+              <strong>TP</strong>
+              <div class="count-bars">
+                <div class="count-line">
+                  <span>A</span>
+                  <div class="count-track">
+                    <div class="count-fill a-bar" style="width:88.88888888888889%"></div>
+                  </div>
+                  <b>16</b>
+                </div>
+                <div class="count-line">
+                  <span>B</span>
+                  <div class="count-track">
+                    <div class="count-fill b-bar" style="width:100.0%"></div>
+                  </div>
+                  <b>18</b>
+                </div>
+              </div>
+            </div>
+
+
+            <div class="count-row">
+              <strong>FP</strong>
+              <div class="count-bars">
+                <div class="count-line">
+                  <span>A</span>
+                  <div class="count-track">
+                    <div class="count-fill a-bar" style="width:5.555555555555555%"></div>
+                  </div>
+                  <b>1</b>
+                </div>
+                <div class="count-line">
+                  <span>B</span>
+                  <div class="count-track">
+                    <div class="count-fill b-bar" style="width:5.555555555555555%"></div>
+                  </div>
+                  <b>1</b>
+                </div>
+              </div>
+            </div>
+
+
+            <div class="count-row">
+              <strong>FN</strong>
+              <div class="count-bars">
+                <div class="count-line">
+                  <span>A</span>
+                  <div class="count-track">
+                    <div class="count-fill a-bar" style="width:16.666666666666664%"></div>
+                  </div>
+                  <b>3</b>
+                </div>
+                <div class="count-line">
+                  <span>B</span>
+                  <div class="count-track">
+                    <div class="count-fill b-bar" style="width:5.555555555555555%"></div>
+                  </div>
+                  <b>1</b>
+                </div>
+              </div>
+            </div>
+
+  <div class="callout">
+    <strong>핵심 해석</strong><br>
+    B는 A보다 TP가 16건에서 18건으로 증가했고, FN은 3건에서 1건으로 감소했습니다.
+    FP는 1건으로 동일합니다. 후보 수 증가 자체가 아니라 정답 회수와 오검색을 함께 봐야 합니다.
+  </div>
+</section>
+
+<section>
+  <h2>4. 질문별 검색 결과</h2>
+  <p class="subtitle">오답이 있는 행은 별도 색상으로 표시했습니다. Q05는 현재 우선 분석 대상입니다.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>질문</th><th>질문 내용</th><th>평가 유형</th><th>B 전략</th>
+      <th>A 결과 ID</th><th>B 결과 ID</th><th>B 누락(FN)</th><th>B 오검색(FP)</th><th>이슈</th>
+    </tr></thead>
+    <tbody>
+            <tr class="issue-row">
+              <td><strong>Q01</strong></td>
+              <td class="question-cell">철도 예약발매 시스템 개량</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">한국철도공사 (용역)_예약발매시스템 개량 ISMP 용역.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q02</strong></td>
+              <td class="question-cell">예약발매시스템 개량</td>
+              <td>supervised</td>
+              <td>NO_AGENCY_USE_A</td>
+              <td class="id-cell">한국철도공사 (용역)_예약발매시스템 개량 ISMP 용역.hwp</td>
+              <td class="id-cell">한국철도공사 (용역)_예약발매시스템 개량 ISMP 용역.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q03</strong></td>
+              <td class="question-cell">한국가스공사 차세대 통합정보시스템 ERP 구축</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">한국가스공사_[재공고]차세대 통합정보시스템(ERP) 구축.hwp</td>
+              <td class="id-cell">한국가스공사_[재공고]차세대 통합정보시스템(ERP) 구축.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="issue-row">
+              <td><strong>Q04</strong></td>
+              <td class="question-cell">가스공사 ERP 구축</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">한국가스공사_[재공고]차세대 통합정보시스템(ERP) 구축.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="critical-row">
+              <td><strong>Q05</strong></td>
+              <td class="question-cell">인천공항운영서비스 차세대 ERP 시스템 구축</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">한국가스공사_[재공고]차세대 통합정보시스템(ERP) 구축.hwp</td>
+              <td class="id-cell">인천공항운영서비스(주)_인천공항운영서비스㈜ 차세대 ERP시스템 구축 .hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q06</strong></td>
+              <td class="question-cell">통합정보시스템 고도화 용역</td>
+              <td>supervised</td>
+              <td>NO_AGENCY_USE_A</td>
+              <td class="id-cell">국가과학기술지식정보서비스_통합정보시스템 고도화 용역.hwp ; 한국한의학연구원_통합정보시스템 고도화 용역.hwp</td>
+              <td class="id-cell">국가과학기술지식정보서비스_통합정보시스템 고도화 용역.hwp ; 한국한의학연구원_통합정보시스템 고도화 용역.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q07</strong></td>
+              <td class="question-cell">한국한의학연구원 통합정보시스템 고도화</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">한국한의학연구원_통합정보시스템 고도화 용역.hwp</td>
+              <td class="id-cell">한국한의학연구원_통합정보시스템 고도화 용역.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q08</strong></td>
+              <td class="question-cell">의료기기산업 종합정보시스템 기능개선</td>
+              <td>supervised</td>
+              <td>NO_AGENCY_USE_A</td>
+              <td class="id-cell">한국보건산업진흥원_의료기기산업 종합정보시스템(정보관리기관) 기능.hwp ; BioIN_의료기기산업 종합정보시스템(정보관리기관) 기능개선 사업(2차).hwp</td>
+              <td class="id-cell">한국보건산업진흥원_의료기기산업 종합정보시스템(정보관리기관) 기능.hwp ; BioIN_의료기기산업 종합정보시스템(정보관리기관) 기능개선 사업(2차).hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q09</strong></td>
+              <td class="question-cell">BioIN 의료기기산업 종합정보시스템 기능개선</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">BioIN_의료기기산업 종합정보시스템(정보관리기관) 기능개선 사업(2차).hwp</td>
+              <td class="id-cell">BioIN_의료기기산업 종합정보시스템(정보관리기관) 기능개선 사업(2차).hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="issue-row">
+              <td><strong>Q10</strong></td>
+              <td class="question-cell">한국수자원공사 시스템 구축</td>
+              <td>agency_pool</td>
+              <td>AGENCY_CANDIDATE_EXPANSION</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">한국수자원공사_건설통합시스템(CMS) 고도화.hwp ; 한국수자원공사_용인 첨단 시스템반도체 국가산단 용수공급사업 타당성.hwp ; 한국수자원공사_수도사업장 통합 사고분석솔루션 시범구축 용역.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>AGENCY_POOL_DIAGNOSTIC</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q11</strong></td>
+              <td class="question-cell">광주과학기술원 연구비관리시스템 연계 모듈 변경</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">광주과학기술원_실시간통합연구비관리시스템(RCMS)  연계 모듈 변경 사업.hwp</td>
+              <td class="id-cell">광주과학기술원_실시간통합연구비관리시스템(RCMS)  연계 모듈 변경 사업.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q12</strong></td>
+              <td class="question-cell">고려대학교 포털 학사정보시스템</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">고려대학교_차세대 포털·학사 정보시스템 구축사업.pdf</td>
+              <td class="id-cell">고려대학교_차세대 포털·학사 정보시스템 구축사업.pdf</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q13</strong></td>
+              <td class="question-cell">삼성전자 스마트폰 개발 사업</td>
+              <td>supervised</td>
+              <td>NO_AGENCY_USE_A</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>TRUE_NEGATIVE</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q14</strong></td>
+              <td class="question-cell">국민연금공단 이러닝 사업 기간은?</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">국민연금공단_2024년 이러닝시스템 운영 용역.hwp</td>
+              <td class="id-cell">국민연금공단_2024년 이러닝시스템 운영 용역.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q15</strong></td>
+              <td class="question-cell">국민연금공단 이러닝 사업 예산은?</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">국민연금공단_2024년 이러닝시스템 운영 용역.hwp</td>
+              <td class="id-cell">국민연금공단_2024년 이러닝시스템 운영 용역.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q16</strong></td>
+              <td class="question-cell">예약발매시스템 개량 사업비는?</td>
+              <td>supervised</td>
+              <td>NO_AGENCY_USE_A</td>
+              <td class="id-cell">한국철도공사 (용역)_예약발매시스템 개량 ISMP 용역.hwp</td>
+              <td class="id-cell">한국철도공사 (용역)_예약발매시스템 개량 ISMP 용역.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q17</strong></td>
+              <td class="question-cell">모바일오피스 고도화 사업 예산은?</td>
+              <td>supervised</td>
+              <td>NO_AGENCY_USE_A</td>
+              <td class="id-cell">한국철도공사 (용역)_모바일오피스 시스템 고도화 용역(총체 및 1차).hwp</td>
+              <td class="id-cell">한국철도공사 (용역)_모바일오피스 시스템 고도화 용역(총체 및 1차).hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q18</strong></td>
+              <td class="question-cell">운행정보기록 자동분석시스템 계약 방식은?</td>
+              <td>supervised</td>
+              <td>NO_AGENCY_USE_A</td>
+              <td class="id-cell">한국철도공사 (용역)_[재공고][긴급][협상형]운행정보기록 자동분석시스.hwp</td>
+              <td class="id-cell">한국철도공사 (용역)_[재공고][긴급][협상형]운행정보기록 자동분석시스.hwp</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q19</strong></td>
+              <td class="question-cell">고려대 포털 학사 시스템 예산과 마감일은?</td>
+              <td>supervised</td>
+              <td>AGENCY_AND_PROJECT</td>
+              <td class="id-cell">고려대학교_차세대 포털·학사 정보시스템 구축사업.pdf</td>
+              <td class="id-cell">고려대학교_차세대 포털·학사 정보시스템 구축사업.pdf</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>EXACT_MATCH</td>
+            </tr>
+
+
+            <tr class="">
+              <td><strong>Q20</strong></td>
+              <td class="question-cell">삼성전자 스마트폰 개발 사업 예산</td>
+              <td>supervised</td>
+              <td>NO_AGENCY_USE_A</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td class="id-cell">-</td>
+              <td>TRUE_NEGATIVE</td>
+            </tr>
+            </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>5. 현재 핵심 개선 과제</h2>
+  <div class="callout">
+    <strong>Q05 — 인천공항운영서비스 차세대 ERP 시스템 구축</strong><br>
+    A와 B 모두 한국가스공사의 차세대 ERP 구축 문서를 반환하고,
+    실제 인천공항운영서비스 문서를 누락했습니다.
+    기관명 인식, 별칭 매칭, 기관 필터링, A fallback 경로를 순서대로 확인해야 합니다.
+  </div>
+  <ul>
+    <li>Q01 철도 예약발매 시스템 개량: B에서 정답 검색 성공</li>
+    <li>Q04 가스공사 ERP 구축: B에서 정답 검색 성공</li>
+    <li>Q13, Q20 삼성전자 스마트폰 개발 사업: 정답 문서가 없는 질문이며 결과 미반환</li>
+    <li>Q10: 기관 후보 풀 진단 전용으로 성능 평가에서 제외</li>
+  </ul>
+</section>
+
+<section>
+  <h2>6. 산출물 및 품질 검증</h2>
+  <p class="subtitle">현재까지 생성·검증한 결과물입니다.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>항목</th><th>상태</th><th>파일 또는 결과</th></tr></thead>
+    <tbody>
+        <tr>
+          <td>A/B 실험 결과 CSV</td>
+          <td><span class="status">완료</span></td>
+          <td><code>results.csv</code></td>
+        </tr>
+
+
+        <tr>
+          <td>상세 평가 보고서</td>
+          <td><span class="status">완료</span></td>
+          <td><code>report.md</code></td>
+        </tr>
+
+
+        <tr>
+          <td>성능 비교 그래프</td>
+          <td><span class="status">완료</span></td>
+          <td><code>search_b_comparison.png</code></td>
+        </tr>
+
+
+        <tr>
+          <td>공유용 README 초안</td>
+          <td><span class="status">완료</span></td>
+          <td><code>README.md</code></td>
+        </tr>
+
+
+        <tr>
+          <td>신규 평가 테스트</td>
+          <td><span class="status">8 passed</span></td>
+          <td><code>tests/test_search_b_experiments.py</code></td>
+        </tr>
+
+
+        <tr>
+          <td>기존 Search-B 테스트</td>
+          <td><span class="status">9 passed</span></td>
+          <td><code>tests/test_project_finder.py</code></td>
+        </tr>
+
+
+        <tr>
+          <td>Ruff 코드 검사</td>
+          <td><span class="status">통과</span></td>
+          <td><code>All checks passed</code></td>
+        </tr>
+        </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>7. 평가 범위와 해석 기준</h2>
+  <ul>
+    <li>프로젝트 데이터 100개, 질문 20개를 사용했습니다.</li>
+    <li>평가 가능 질문은 19개이며, positive 17개와 negative 2개로 구성됩니다.</li>
+    <li>Q10은 기관 후보 풀 진단 전용으로 평가에서 제외했습니다.</li>
+    <li>Q13과 Q20은 정답 문서가 없는 negative 질문입니다.</li>
+    <li>Micro Recall과 Mean Recall은 계산 단위가 다르므로 서로 같은 지표로 해석하면 안 됩니다.</li>
+    <li>Precision@3 평균은 정답 문서가 있는 positive 질문을 대상으로 계산합니다.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>8. 다음 작업 순서</h2>
+  <ol class="steps">
+    <li>Q05 기관명 추출 및 별칭 매칭 실패 원인 분석</li>
+    <li>기관명이 명시된 질문에서 타 기관 문서가 반환되지 않도록 검색 로직 개선</li>
+    <li>Q06, Q08 등 유사 사업명 질문의 오검색 가능성 점검</li>
+    <li>전체 벤치마크 재실행 및 A/B 지표 재계산</li>
+    <li>그래프와 팀 공유 보고서 갱신</li>
+    <li>최종 테스트 후 코드와 문서를 한 번에 GitHub 공유</li>
+  </ol>
+</section>
+
+<footer>Search-B Experiment Report · Generated from results.csv</footer>
+</main>
+</body>
+</html>
