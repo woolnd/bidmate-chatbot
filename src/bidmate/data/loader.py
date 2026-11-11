@@ -22,25 +22,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from bidmate.data.hwp_loader import extract_hwp_text
 from bidmate.data.pdf_loader import extract_pdf_text
 from bidmate.schemas import LoadedDocument, ProjectInfo
 
-if TYPE_CHECKING:
-    # ProjectInfo, LoadedDocument의 칸은 schemas.py에 있다 (11/10 확정)
-    from bidmate.schemas import LoadedDocument, ProjectInfo
-
-
-
 
 def load_document(project: ProjectInfo, raw_folder: Path) -> LoadedDocument:
     """확장자를 보고 알맞은 함수로 글자를 뽑고, 똑같은 규칙으로 정리한다."""
-    # TODO 1. raw_folder / project.project_id 로 원본 경로 만들기 (문서 번호가 곧 파일 이름)
-    # TODO 2. .hwp면 extract_hwp_text, .pdf면 extract_pdf_text 부르기
-    # TODO 3. clean_text로 정리하기
-    # TODO 4. LoadedDocument(project_id, text)에 담아 돌려주기
 
     file_path = raw_folder / project.project_id
 
@@ -66,9 +55,8 @@ def load_document(project: ProjectInfo, raw_folder: Path) -> LoadedDocument:
 
 def clean_text(text: str) -> str:
     """쓸데없는 공백·머리말·쪽번호를 지운다."""
-    # TODO 1주차: 연속 공백 줄이기만
     # TODO 2주차: 머리말·꼬리말, 쪽번호 지우기
-    
+
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)

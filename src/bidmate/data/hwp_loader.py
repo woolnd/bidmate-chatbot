@@ -38,7 +38,6 @@ def extract_hwp_text(file_path: Path) -> str:
 
     # 2. 문서 요소를 순서대로 순회
     for block in doc.blocks:
-
         block_type = type(block).__name__
 
         # 3. 일반 본문 텍스트 추출
@@ -50,7 +49,6 @@ def extract_hwp_text(file_path: Path) -> str:
 
         # 4. 표 텍스트 추출
         elif block_type == "Table":
-
             n_rows = block.n_rows
             n_cols = block.n_cols
 
@@ -58,15 +56,11 @@ def extract_hwp_text(file_path: Path) -> str:
                 continue
 
             # 셀 내용을 저장할 2차원 리스트 생성
-            rows = [
-                [""] * n_cols
-                for _ in range(n_rows)
-            ]
+            rows = [[""] * n_cols for _ in range(n_rows)]
 
             # 5. 셀의 시작 위치에만 텍스트 저장
             # 병합 영역 전체에 복사하지 않아 중복 방지
             for cell in block.cells:
-
                 row_idx = cell.row
                 col_idx = cell.col
 
@@ -99,13 +93,9 @@ def extract_hwp_text(file_path: Path) -> str:
             # 8. 일반적인 표: 첫 행이 모두 채워진 경우
             first_row = rows[0]
 
-            has_headers = (
-                n_rows > 1
-                and all(header for header in first_row)
-            )
+            has_headers = n_rows > 1 and all(header for header in first_row)
 
             if has_headers:
-
                 headers = first_row
                 data_rows = rows[1:]
 
@@ -113,7 +103,6 @@ def extract_hwp_text(file_path: Path) -> str:
                     cells = []
 
                     for i, value in enumerate(row):
-
                         if not value:
                             continue
 
@@ -126,40 +115,26 @@ def extract_hwp_text(file_path: Path) -> str:
 
             # 9. 병합 셀 등으로 첫 행에 빈 셀이 있는 표
             else:
-
                 row_idx = 0
 
                 while row_idx < n_rows:
-
                     current_row = rows[row_idx]
 
                     # 현재 행에서 값이 있는 열 위치 확인
-                    current_cols = [
-                        i for i, value in enumerate(current_row)
-                        if value
-                    ]
+                    current_cols = [i for i, value in enumerate(current_row) if value]
 
                     # 다음 행이 존재하면 두 행의 구조 비교
                     if row_idx + 1 < n_rows:
-
                         next_row = rows[row_idx + 1]
 
-                        next_cols = [
-                            i for i, value in enumerate(next_row)
-                            if value
-                        ]
+                        next_cols = [i for i, value in enumerate(next_row) if value]
 
                         # 두 행의 값이 같은 열에 위치하고
                         # 항목이 2개 이상이면 헤더-데이터 관계로 판단
-                        if (
-                            len(current_cols) >= 2
-                            and current_cols == next_cols
-                        ):
-
+                        if len(current_cols) >= 2 and current_cols == next_cols:
                             cells = []
 
                             for col_idx in current_cols:
-
                                 header = current_row[col_idx]
                                 value = next_row[col_idx]
 
@@ -172,10 +147,7 @@ def extract_hwp_text(file_path: Path) -> str:
                             continue
 
                     # 관계를 확신할 수 없다면 원본 값만 보존
-                    values = [
-                        value for value in current_row
-                        if value
-                    ]
+                    values = [value for value in current_row if value]
 
                     if values:
                         elements.append(" | ".join(values))

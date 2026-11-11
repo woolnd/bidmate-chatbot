@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 CHUNK_METADATA_KEYS = ("chunk_id", "project_id", "agency_name", "project_name")
 
 # 대화 기록: [(질문, 답변), (질문, 답변), ...] 오래된 것부터 차례로.
-# 화면(Streamlit)이 모아 두고, 1단계 질문 다듬기와 4단계 답변 만들기가 받는다.
+# 화면(브라우저)이 모아 두고, 1단계 질문 다듬기와 4단계 답변 만들기가 받는다.
 ChatHistory = list[tuple[str, str]]
 
 
