@@ -84,9 +84,8 @@ def make_session_token() -> str:
     받는 것: 없음 (APP_PASSWORD를 쓴다)
     넘기는 것: 64글자 문자열. 비밀번호가 같으면 항상 같은 값
     """
-    # TODO hmac.new(키, 메시지, hashlib.sha256).hexdigest()
-    #   키 = APP_PASSWORD.encode(), 메시지 = b"bidmate-session"
-    return ""
+    # 1. 비밀번호를 열쇠로 고정 문장에 지문을 찍는다 (비밀번호를 모르면 같은 값을 못 만든다)
+    return hmac.new(APP_PASSWORD.encode(), b"bidmate_session", hashlib.sha256).hexdigest()
 
 
 def require_login(request: Request) -> None:
@@ -95,23 +94,26 @@ def require_login(request: Request) -> None:
     받는 것: 요청 (쿠키를 본다)
     넘기는 것: 없음. 로그인 안 됐으면 HTTPException(401)을 던진다
     """
-    # TODO 1. APP_PASSWORD가 비어 있으면 개발 모드라 그냥 통과 (return)
-    # TODO 2. request.cookies.get(SESSION_COOKIE_NAME)로 쿠키 값 꺼내기
-    # TODO 3. 쿠키 값이 make_session_token()과 같지 않으면 401
-    #   비교는 hmac.compare_digest(쿠키 값, 토큰) (비교 시간 차이로 값을 알아내지 못하게)
-    #   raise HTTPException(status_code=401, detail="로그인이 필요합니다")
-    return None
+    # 1. 비밀번호가 비어 있으면 개발 모드라 그냥 통과 (로컬·CI에서 로그인 없이 쓰려고)
+    if not APP_PASSWORD:
+        return
+
+    # 2. 쿠키가 로그인 때 준 토큰과 같은지 (compare_digest: 비교 시간으로 값을 못 알아내게)
+    cookie = request.cookies.get(SESSION_COOKIE_NAME) or ""
+    if not hmac.compare_digest(cookie, make_session_token()):
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
 
 @app.post("/api/login")
 def login(login_request: LoginRequest, response: Response) -> dict:
     """비밀번호가 맞으면 로그인 쿠키를 준다. 틀리면 401."""
-    # TODO 1. hmac.compare_digest(login_request.password, APP_PASSWORD)가 아니면 401
-    # TODO 2. response.set_cookie(SESSION_COOKIE_NAME, make_session_token(),
-    #           httponly=True, samesite="lax")
-    #   httponly: 브라우저 JS가 쿠키를 못 읽게 한다 (쿠키 훔치기 막기)
-    # TODO 3. {"ok": True} 돌려주기
-    raise HTTPException(status_code=501, detail="재웅이 채운다")
+    # 1. 비밀번호 비교 (bytes로 바꿔야 한글을 쳐도 에러가 안 난다)
+    if not hmac.compare_digest(login_request.password.encode(), APP_PASSWORD.encode()):
+        raise HTTPException(status_code=401, detail="비밀번호가 다릅니다.")
+
+    # 2. 로그인 쿠키 주기 (httponly: 브라우저 JS가 쿠키를 못 읽게 해서 쿠키 훔치기를 막는다)
+    response.set_cookie(SESSION_COOKIE_NAME, make_session_token(), httponly=True, samesite="lax")
+    return {"ok": True}
 
 
 # ── 화면과 상태 확인 ──
@@ -135,31 +137,49 @@ def health() -> dict:
 @app.get("/api/projects", dependencies=[Depends(require_login)])
 def projects() -> list[ProjectView]:
     """사업 목록. 목록표 파일이 없으면(CI, 데이터 받기 전) 빈 목록."""
-    # TODO 1. PROJECT_LIST_PATH.exists()가 아니면 [] 돌려주기
-    # TODO 2. get_projects()의 ProjectInfo마다 ProjectView 만들어 목록으로 돌려주기
-    #   ProjectView(project_id=…, agency_name=…, project_name=…)
-    return []
+    # 1. 목록표가 없으면 빈 목록 (CI에는 data_list.csv가 없다)
+    if not PROJECT_LIST_PATH.exists():
+        return []
+
+    # 2. 사업마다 화면에 필요한 세 칸만 담기 (예산·마감일은 사이드바에 안 쓴다)
+    project_views = []
+    for project in get_projects():
+        project_views.append(
+            ProjectView(
+                project_id=project.project_id,
+                agency_name=project.agency_name,
+                project_name=project.project_name,
+            )
+        )
+    return project_views
 
 
 @app.post("/api/chat", dependencies=[Depends(require_login)])
 def chat(chat_request: ChatRequest) -> ChatResponse:
     """질문 하나를 네 단계에 통과시켜 답을 돌려준다."""
-    # TODO 1. start_time = time.time()
-    # TODO 2. state = run_chatbot(chat_request.question, chat_request.chat_history)
-    # TODO 3. seconds = time.time() - start_time
-    # TODO 4. state["chunks"]의 (document, score)마다 ChunkView 만들기
-    #   chunk_id     = document.metadata.get("chunk_id", "")
-    #   project_name = document.metadata.get("project_name", "")
-    #   text         = document.page_content[:CHUNK_PREVIEW_LENGTH]
-    #   score        = float(score)
-    # TODO 5. answer_result = state["answer_result"]로 ChatResponse 만들어 돌려주기
-    #   answer, source_project_names, has_evidence는 answer_result에서
-    #   rewritten_question은 state["rewritten_question"]
+    # 1. 네 단계 실행 (응답 시간 목표 10초라 걸린 시간을 같이 잰다)
+    start_time = time.time()
+    state = run_chatbot(chat_request.question, chat_request.chat_history)
+    seconds = time.time() - start_time
+
+    # 2. 조각을 화면용 모양으로 (원문은 앞부분만 잘라 응답을 가볍게)
+    chunk_views = [
+        ChunkView(
+            chunk_id=document.metadata.get("chunk_id", ""),
+            project_name=document.metadata.get("project_name", ""),
+            text=document.page_content[:CHUNK_PREVIEW_LENGTH],
+            score=float(score),
+        )
+        for document, score in state["chunks"]
+    ]
+
+    # 3. 4단계 답변 결과에서 칸을 꺼내 응답 만들기
+    answer_result = state["answer_result"]
     return ChatResponse(
-        answer="찾은 문서에 없습니다.",
-        source_project_names=[],
-        has_evidence=False,
-        rewritten_question=chat_request.question,
-        chunks=[],
-        seconds=0.0,
+        answer=answer_result.answer,
+        source_project_names=answer_result.source_project_names,
+        has_evidence=answer_result.has_evidence,
+        rewritten_question=state["rewritten_question"],
+        chunks=chunk_views,
+        seconds=round(seconds, 2),
     )
