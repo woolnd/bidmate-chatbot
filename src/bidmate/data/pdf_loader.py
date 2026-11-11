@@ -1,21 +1,45 @@
-"""pdf 파일에서 글자 뽑기. 담당: 데이터 파트
 
-표는 뽑을 때 한 행을 한 줄로 풀어 쓴다: "칸: 값 | 칸: 값" (JSON 아님)
-
-받는 것: pdf 파일 경로
-넘기는 것: 본문 글자 전체 (정리 전. 정리는 loader.py가 한다)
-
-실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
-    >>> from bidmate.config import RAW_FOLDER
-    >>> from bidmate.data.pdf_loader import extract_pdf_text
-    >>> text = extract_pdf_text(RAW_FOLDER / "파일이름.pdf")   # data/raw/ 안의 pdf 하나
-    >>> print(text[:1000])  # 앞 1000자만 보기
-"""
+"""PDF 문서에서 텍스트를 추출한다."""
 
 from pathlib import Path
 
+from pypdf import PdfReader
+
 
 def extract_pdf_text(file_path: Path) -> str:
-    """pdf 파일에서 본문 글자를 뽑는다. 표는 "칸: 값 | 칸: 값"으로 풀어 쓴다."""
-    # TODO: 라이브러리로 pdf 열기 → 쪽마다 글자 뽑기 → 이어 붙여 돌려주기
-    return "지어낸 pdf 본문입니다. " * 100
+    """PDF 파일의 각 페이지에서 텍스트를 추출한다.
+
+    Args:
+        file_path: 읽을 PDF 파일 경로
+
+    Returns:
+        모든 페이지의 텍스트를 합친 문자열
+
+    Raises:
+        FileNotFoundError: 파일이 존재하지 않는 경우
+        ValueError: PDF가 아니거나 추출된 내용이 비어 있는 경우
+    """
+    if not file_path.exists():
+        raise FileNotFoundError(f"PDF 파일을 찾을 수 없습니다: {file_path}")
+
+    if file_path.suffix.lower() != ".pdf":
+        raise ValueError(f"PDF 파일이 아닙니다: {file_path}")
+
+    reader = PdfReader(str(file_path))
+
+    page_texts = []
+
+    for page_number, page in enumerate(reader.pages, start=1):
+        page_text = page.extract_text() or ""
+
+        if page_text.strip():
+            page_texts.append(
+                f"[페이지 {page_number}]\n{page_text.strip()}"
+            )
+
+    text = "\n\n".join(page_texts)
+
+    if not text.strip():
+        raise ValueError(f"PDF 문서에서 텍스트를 추출하지 못했습니다: {file_path}")
+
+    return text

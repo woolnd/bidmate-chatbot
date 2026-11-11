@@ -1,22 +1,33 @@
-"""hwp 파일에서 글자 뽑기. 담당: 데이터 파트
 
-하루 안에 안 되면 PM과 다른 방법(예: pdf로 변환해서 읽기)을 정한다.
-표는 뽑을 때 한 행을 한 줄로 풀어 쓴다: "칸: 값 | 칸: 값" (JSON 아님)
-
-받는 것: hwp 파일 경로
-넘기는 것: 본문 글자 전체 (정리 전. 정리는 loader.py가 한다)
-
-실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
-    >>> from bidmate.config import RAW_FOLDER
-    >>> from bidmate.data.hwp_loader import extract_hwp_text
-    >>> text = extract_hwp_text(RAW_FOLDER / "파일이름.hwp")   # data/raw/ 안의 hwp 하나
-    >>> print(text[:1000])  # 앞 1000자만 보기
-"""
+"""HWP 문서에서 텍스트와 표를 추출한다."""
 
 from pathlib import Path
 
+import syhwp
+
 
 def extract_hwp_text(file_path: Path) -> str:
-    """hwp 파일에서 본문 글자를 뽑는다. 표는 "칸: 값 | 칸: 값"으로 풀어 쓴다."""
-    # TODO: 라이브러리로 hwp 열기 → 글자 뽑기 → 돌려주기
-    return "지어낸 hwp 본문입니다. " * 100
+    """HWP 파일을 Markdown 텍스트로 추출한다.
+
+    Args:
+        file_path: 읽을 HWP 파일 경로
+
+    Returns:
+        본문과 표가 포함된 Markdown 텍스트
+
+    Raises:
+        FileNotFoundError: 파일이 존재하지 않는 경우
+        ValueError: 추출된 내용이 비어 있는 경우
+    """
+    if not file_path.exists():
+        raise FileNotFoundError(f"HWP 파일을 찾을 수 없습니다: {file_path}")
+
+    if file_path.suffix.lower() != ".hwp":
+        raise ValueError(f"HWP 파일이 아닙니다: {file_path}")
+
+    text = syhwp.extract_markdown(str(file_path))
+
+    if not text or not text.strip():
+        raise ValueError(f"HWP 문서에서 텍스트를 추출하지 못했습니다: {file_path}")
+
+    return text.strip()
