@@ -53,7 +53,7 @@ B2G 입찰 컨설팅 스타트업 '입찰메이트'의 엔지니어링 팀이라
 ```bash
 uv sync                                    # 패키지 설치 (처음 한 번, 패키지가 바뀌었을 때)
 uv run python scripts/build_index.py       # 문서를 읽고 잘라서 Vector DB에 저장 (미리 한 번)
-uv run streamlit run app/streamlit_app.py  # 챗봇 화면 실행
+uv run uvicorn app.server:app --reload    # 챗봇 서버 + 화면 실행 (http://localhost:8000, API 문서 /docs)
 uv run pytest                              # 테스트
 uv run ruff check . && uv run ruff format . # 코드 스타일 검사와 자동 정리
 ```
@@ -97,7 +97,7 @@ src/bidmate/
   generation/         # 생성: 질문 다듬기, 프롬프트, 답변
   pipeline/           # 4단계 연결
   service/            # 로그, 응답 캐시
-app/                  # Streamlit 화면
+app/                  # 웹 서버(FastAPI, server.py)와 화면(static/index.html)
 scripts/              # 한 번씩 돌리는 스크립트
 evaluation/           # 평가셋 양식과 채점
 tests/                # 테스트
@@ -109,7 +109,7 @@ data/                 # 원본·가공 데이터, Chroma 저장 폴더 (Git에 �
 ## 스택
 
 gpt-5-mini(답변 최대 800토큰, temperature 대신 `reasoning_effort`), text-embedding-3-small, Chroma,
-LangChain + LangGraph, Streamlit + 비밀번호, GCP VM 1대(L4, 16GB). 시나리오 A는 Ollama 8B 이하,
+LangChain + LangGraph, FastAPI 서버 + HTML 화면 + 비밀번호, GCP VM 1대(L4, 16GB). 시나리오 A는 Ollama 8B 이하,
 temperature를 낮게 고정해 답이 흔들리지 않게 한다(값은 `config.py`).
 바꾸려면 평가 점수로 근거를 보인다.
 
