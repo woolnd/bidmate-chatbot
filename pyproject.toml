@@ -18,7 +18,8 @@ dependencies = [
     # 설정
     "python-dotenv>=1.0",
     # 화면
-    "streamlit>=1.40",
+    "fastapi>=0.162.2",
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]

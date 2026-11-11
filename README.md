@@ -29,7 +29,7 @@ cp .env.example .env
 
 ```bash
 uv run python scripts/build_index.py       # 문서를 잘라 Vector DB에 저장 (문서가 바뀔 때만, 구현 후)
-uv run streamlit run app/streamlit_app.py  # 챗봇 화면 (구현 후)
+uv run uvicorn app.server:app --reload    # 챗봇 서버 + 화면 (http://localhost:8000)
 uv run pytest                              # 테스트
 uv run ruff check . && uv run ruff format . # 코드 스타일 검사·정리
 ```

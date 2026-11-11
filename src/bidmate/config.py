@@ -14,6 +14,7 @@
     기능 켜기/끄기     1단계, 2단계, 조각 앞 기관명 (11/23~24 기능 끄기 실험용)
 """
 
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -51,3 +52,7 @@ ANSWER_MAX_TOKENS = 800  # 생각에 쓴 토큰도 포함된다. 답이 잘리�
 
 # 기능 켜기/끄기 (11/23~24 기능 끄기 실험용)
 USE_QUESTION_REWRITE = True  # 1단계 질문 다듬기. 끄면 질문을 그대로 넘긴다
+
+# 웹 서버 (FastAPI)
+# 화면 비밀번호. .env에서 읽는다. 비어 있으면 비밀번호 없이 열린다 (개발 모드)
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")

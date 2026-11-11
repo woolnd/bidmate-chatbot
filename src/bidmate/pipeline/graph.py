@@ -89,7 +89,7 @@ def build_graph() -> CompiledStateGraph:
 
 
 def run_chatbot(question: str, chat_history: ChatHistory) -> ChatState:
-    """질문 하나를 네 단계에 통과시킨다. 화면(Streamlit)과 평가 채점이 이 함수 하나만 부른다.
+    """질문 하나를 네 단계에 통과시킨다. 웹 서버(app/server.py)와 평가 채점이 이 함수 하나만 부른다.
 
     받는 것: 질문, 대화 기록 [(질문, 답변), ...]
     넘기는 것: 끝까지 채워진 ChatState. 답변은 ["answer_result"]
