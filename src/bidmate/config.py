@@ -40,6 +40,9 @@ TOP_K = 5  # 찾아올 조각 수 (2주차에 3·5·10 비교)
 # 생성 (1·4단계)
 ANSWER_MODEL_NAME = "gpt-5-mini"  # 1단계 질문 다듬기와 4단계 답변이 같이 쓰는 모델
 MAX_HISTORY_TURNS = 3  # AI에게 넘길 대화 기록 수 (최근 질문·답변 3번)
+# OpenAI 응답을 기다리는 최대 시간(초). 없으면 연결이 멈췄을 때 끝없이 기다린다
+# 넘으면 재시도(2번) 뒤 에러. 응답 목표 10초보다 넉넉하게
+OPENAI_TIMEOUT_SECONDS = 30
 
 # 1단계 질문 다듬기
 REWRITE_ANSWER_PREVIEW_LENGTH = 200  # 대화 기록의 답변은 앞 200자만 넣는다 (기관명·사업명만 필요)
@@ -56,3 +59,8 @@ USE_QUESTION_REWRITE = True  # 1단계 질문 다듬기. 끄면 질문을 그대
 # 웹 서버 (FastAPI)
 # 화면 비밀번호. .env에서 읽는다. 비어 있으면 비밀번호 없이 열린다 (개발 모드)
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+
+# 평가 채점 (evaluation/answer_grader.py)
+JUDGE_MODEL_NAME = "gpt-5-mini"  # 챗봇 답이 모범 답과 맞는지 판단하는 채점 AI
+JUDGE_REASONING_EFFORT = "low"  # 두 답의 핵심 내용을 비교해야 해서 minimal보다 한 단계 위
+JUDGE_MAX_TOKENS = 400  # 맞음/틀림 + 짧은 이유. 생각에 쓴 토큰도 포함된다

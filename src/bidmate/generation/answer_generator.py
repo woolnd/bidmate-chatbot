@@ -18,6 +18,7 @@ from bidmate.config import (
     ANSWER_MODEL_NAME,
     ANSWER_REASONING_EFFORT,
     MAX_HISTORY_TURNS,
+    OPENAI_TIMEOUT_SECONDS,
 )
 from bidmate.generation.prompts import build_answer_messages
 from bidmate.schemas import AnswerResult, ChatHistory
@@ -37,6 +38,7 @@ def make_answer_model() -> Runnable:
         model=ANSWER_MODEL_NAME,
         reasoning_effort=ANSWER_REASONING_EFFORT,
         max_completion_tokens=ANSWER_MAX_TOKENS,
+        timeout=OPENAI_TIMEOUT_SECONDS,
     )
 
     # 2. 구조화된 출력을 붙인다: invoke 결과가 AIMessage가 아니라 AnswerResult로 나온다
