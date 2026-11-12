@@ -57,6 +57,8 @@ def clean_text(text: str) -> str:
     """쓸데없는 공백·머리말·쪽번호를 지운다."""
     # TODO 2주차: 머리말·꼬리말, 쪽번호 지우기
 
+    # syhwp가 한글 전용 기호를 반쪽 글자(surrogate)로 돌려준다. 임베딩 오류가 나서 지운다
+    text = re.sub(r"[\ud800-\udfff]", "", text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)

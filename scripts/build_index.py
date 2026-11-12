@@ -16,7 +16,7 @@ from bidmate.config import PROJECT_LIST_PATH, RAW_FOLDER
 from bidmate.data.chunker import make_info_chunk, split_document
 from bidmate.data.loader import load_document
 from bidmate.data.metadata import load_project_list
-from bidmate.retrieval.vector_store import save_chunks
+from bidmate.retrieval.vector_store import get_vector_store, save_chunks
 
 
 def main() -> None:
@@ -33,6 +33,9 @@ def main() -> None:
         except Exception as error:  # 한 문서가 실패해도 나머지는 계속한다
             failed_files.append(f"{project.project_id}: {error}")
 
+    # 다시 저장할 때 옛 조각이 남지 않게 비운다 (조각 0개면 기존 저장소를 지킨다)
+    if all_chunks:
+        get_vector_store().reset_collection()
     save_chunks(all_chunks)  # ④ 검색 파트로 넘겨서 Chroma에 저장
     print(f"문서 {len(project_list)}개 → 조각 {len(all_chunks)}개")
     for failed in failed_files:
