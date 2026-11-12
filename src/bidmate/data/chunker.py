@@ -7,6 +7,7 @@
 """
 
 from typing import Any
+
 from langchain_core.documents import Document
 
 # config.py 등에서 경로와 설정값을 가져온다고 가정
@@ -30,15 +31,15 @@ def split_document(raw_text: str, project: dict[str, Any]) -> list[Document]:
     project_id = project["project_id"]
     agency_name = project["agency_name"]
     project_name = project["project_name"]
-    
+
     chunks: list[Document] = []
-    
+
     # 예시: 텍스트를 일정 크기로 자르는 로직 (TextSplitter 활용)
     # text_pieces = text_splitter.split_text(raw_text)
-    text_pieces = [raw_text] # 임시 예시
-    
+    text_pieces = [raw_text]  # 임시 예시
+
     for idx, piece in enumerate(text_pieces, start=1):
-        chunk_suffix = f"{idx:04d}" # 0001, 0002 형태
+        chunk_suffix = f"{idx:04d}"  # 0001, 0002 형태
         chunks.append(
             Document(
                 page_content=f"[{agency_name} / {project_name}]\n{piece}",
@@ -50,7 +51,7 @@ def split_document(raw_text: str, project: dict[str, Any]) -> list[Document]:
                 },
             )
         )
-        
+
     return chunks
 
 
@@ -59,7 +60,7 @@ def make_info_chunk(project: dict[str, Any]) -> Document:
     project_id = project["project_id"]
     agency_name = project["agency_name"]
     project_name = project["project_name"]
-    
+
     return Document(
         page_content=f"[{agency_name} / {project_name}]\n기본 정보: 발주 기관 {agency_name} | 예산 ...",
         metadata={
@@ -87,23 +88,23 @@ def main() -> None:
         try:
             # 1. 파일 읽기 및 텍스트 추출
             raw_text = load_document(project, "data/raw")
-            
+
             # 2. 본문 조각 자르기
             project_chunks = split_document(raw_text, project)
             all_chunks.extend(project_chunks)
-            
+
             # 3. 기본 정보 조각 추가
             info_chunk = make_info_chunk(project)
             all_chunks.append(info_chunk)
-            
+
         except Exception as e:
-            # 에러가 나도 멈추지 않고 실패한 파일 이름을 모아둠 
+            # 에러가 나도 멈추지 않고 실패한 파일 이름을 모아둠
             failed_files.append(project.get("project_id", "unknown"))
             print(f"Error processing {project.get('project_id')}: {e}")
 
     # 4. 검색 파트로 전달
     save_chunks(all_chunks)
-    
+
     if failed_files:
         print(f"실패한 파일 목록: {failed_files}")
 
