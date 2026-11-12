@@ -23,7 +23,9 @@ NO_CONTENT_QUESTION = {
 
 
 def make_answer(answer: str, has_evidence: bool = True) -> AnswerResult:
-    return AnswerResult(answer=answer, source_project_names=[], has_evidence=has_evidence)
+    return AnswerResult(
+        answer=answer, source_project_names=[], has_evidence=has_evidence, is_rfp_question=True
+    )
 
 
 def make_fake_judge(is_correct: bool, received_messages: list | None = None):

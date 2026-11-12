@@ -54,7 +54,7 @@ def rewrite_question(
     if not USE_QUESTION_REWRITE or len(chat_history) == 0:
         return question
 
-    # 2. 대화 기록은 최근 MAX_HISTORY_TURNS번(3번)만 넘긴다
+    # 2. 대화 기록은 최근 MAX_HISTORY_TURNS번(5번)만 넘긴다
     recent_history = chat_history[-MAX_HISTORY_TURNS:]
 
     # 3. 메시지 만들기: [시스템 메시지(고정), 사람 메시지(대화 기록 + 새 질문)]

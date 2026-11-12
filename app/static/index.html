@@ -9,7 +9,7 @@
   POST /api/login      {password}                → 200 (로그인 쿠키) / 401 (틀림)
   POST /api/chat       {question, chat_history: [[질문, 답변], ...]}
                        → 200 {
-                           answer: str, source_project_names: [str], has_evidence: bool,
+                           answer: str, source_project_names: [str], has_evidence: bool, is_rfp_question: bool,
                            rewritten_question: str, seconds: float,
                            chunks: [{chunk_id, project_name, text, score}],
                            // v0.2 (없으면 그 칸을 안 그린다)
@@ -118,6 +118,14 @@
       class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#7C71F2] via-[#857BF4] to-[#9B92F8] hover:opacity-95 active:scale-[0.98] text-white py-3 px-4 rounded-2xl font-semibold text-sm shadow-pastel-glow transition-all">
       <span class="material-symbols-outlined text-lg">add</span><span>새 대화 시작하기</span>
     </button>
+
+    <!-- 지난 대화: 이 브라우저에만 저장된다 (localStorage) -->
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+        <span class="material-symbols-outlined text-[17px] text-[#7C71F2]">history</span><span>지난 대화</span>
+      </div>
+      <ul id="conversationList" class="flex flex-col gap-1 max-h-48 overflow-y-auto m-0 p-0 list-none"></ul>
+    </div>
 
     <div class="bg-gradient-to-br from-[#FAF8FE] to-[#F5F2FB] rounded-2xl p-4 border border-[#ECE5F6] flex flex-col gap-3 shadow-pastel-sm">
       <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700">
@@ -260,10 +268,68 @@
     input.focus();
   }
 
+  // ── 지난 대화: 답이 올 때마다 이 브라우저(localStorage)에 저장한다. 다른 사람·다른 기기와는 공유되지 않는다 ──
+  const CONVERSATIONS_KEY = 'bidmate-conversations';
+  const MAX_CONVERSATIONS = 30;  // 오래된 것부터 지운다
+  let currentConversationId = null;
+
+  function loadConversations() {
+    try { return JSON.parse(localStorage.getItem(CONVERSATIONS_KEY)) || []; } catch { return []; }
+  }
+
+  function storeConversations(conversations) {
+    try { localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations.slice(0, MAX_CONVERSATIONS))); } catch { /* 저장이 막힌 브라우저면 이번 화면에서만 쓴다 */ }
+  }
+
+  function saveCurrentConversation() {
+    if (chatHistory.length === 0) return;
+    currentConversationId = currentConversationId || `conversation-${Date.now()}`;
+    const others = loadConversations().filter((conversation) => conversation.id !== currentConversationId);
+    // 1. 방금 대화를 맨 위로: 제목은 첫 질문, 화면은 그린 그대로(html) 저장
+    storeConversations([{
+      id: currentConversationId,
+      title: chatHistory[0][0],
+      history: chatHistory,
+      html: document.getElementById('chatStream').innerHTML,
+    }, ...others]);
+    renderConversationList();
+  }
+
+  function renderConversationList() {
+    document.getElementById('conversationList').innerHTML = loadConversations().map((conversation) => `
+      <li class="group flex items-center gap-1 rounded-xl ${conversation.id === currentConversationId ? 'bg-[#F1EDFD]' : 'hover:bg-[#FAF8FE]'}">
+        <button type="button" data-conversation-id="${escapeHtml(conversation.id)}" title="${escapeHtml(conversation.title)}"
+          class="flex-1 min-w-0 text-left px-2.5 py-1.5 text-[12.5px] text-slate-600 truncate">${escapeHtml(conversation.title)}</button>
+        <button type="button" data-delete-conversation="${escapeHtml(conversation.id)}" title="삭제"
+          class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-500 transition-opacity">
+          <span class="material-symbols-outlined text-[15px]">close</span></button>
+      </li>`).join('');
+  }
+
+  function openConversation(conversationId) {
+    const conversation = loadConversations().find((item) => item.id === conversationId);
+    if (!conversation || isWaiting) return;
+    currentConversationId = conversation.id;
+    chatHistory = conversation.history;
+    document.getElementById('chatStream').innerHTML = conversation.html;
+    renderConversationList();
+    scrollToBottom();
+  }
+
+  function deleteConversation(conversationId) {
+    storeConversations(loadConversations().filter((conversation) => conversation.id !== conversationId));
+    if (conversationId === currentConversationId) resetChat();
+    renderConversationList();
+  }
+
+  // 새 대화: 지금 대화는 이미 저장돼 있으니 화면만 비우고 새 번호로 시작한다
   function resetChat() {
+    if (isWaiting) return;
     chatHistory = [];
+    currentConversationId = null;
     document.getElementById('chatStream').innerHTML = '';
     document.getElementById('promptInput').value = '';
+    renderConversationList();
   }
 
   // ── 1. 처음 열 때: 사업 목록을 받아 사이드바·추천 질문을 채운다 (401이면 로그인 화면) ──
@@ -371,6 +437,7 @@
       const result = await response.json();
       loading.outerHTML = answerCardHtml(question, result);
       chatHistory.push([question, result.answer]);
+      saveCurrentConversation();
     } catch (error) {
       loading.outerHTML = errorHtml(error.message);
     } finally {
@@ -402,7 +469,7 @@
       <div class="flex justify-start items-start gap-3 pr-4">
         ${botAvatarHtml()}
         <div class="bg-white rounded-3xl rounded-tl-md px-6 py-4 border border-[#EFE8F7] shadow-pastel-card text-sm text-slate-500 flex items-center gap-2">
-          문서에서 찾는 중 <span class="dot-loading font-bold text-[#7C71F2]"><span>·</span><span>·</span><span>·</span></span>
+          답변 작성 중 <span class="dot-loading font-bold text-[#7C71F2]"><span>·</span><span>·</span><span>·</span></span>
         </div>
       </div>`;
   }
@@ -423,13 +490,15 @@
         <span class="material-symbols-outlined text-sm text-[#7C71F2]">verified</span><span>${escapeHtml(name)}</span>
       </span>`).join('');
 
-    const noEvidence = result.has_evidence ? '' : `
+    // 인사·챗봇 소개 답(is_rfp_question=false)은 근거 안내와 원문을 보여 주지 않는다
+    const isSmallTalk = result.is_rfp_question === false;
+    const noEvidence = result.has_evidence || isSmallTalk ? '' : `
       <div class="flex items-start gap-2.5 text-[#C8563C] font-semibold bg-[#FFF4EE] p-3 rounded-xl border border-[#FDDCC7] text-sm">
         <span class="material-symbols-outlined text-[19px] text-[#E06D53] shrink-0">info</span>
         <span>찾은 문서에서 근거를 찾지 못했습니다. 기관명·사업명을 넣어 다시 물어보세요.</span>
       </div>`;
 
-    const chunks = result.chunks || [];
+    const chunks = isSmallTalk ? [] : result.chunks || [];
     const evidence = chunks.length === 0 ? '' : `
       <details class="group bg-[#FAF8FE] rounded-2xl border border-[#EAE3F5] overflow-hidden">
         <summary class="cursor-pointer list-none flex items-center justify-between p-3.5 select-none hover:bg-[#F3EEFA] transition-colors text-xs font-semibold text-slate-700">
@@ -553,6 +622,16 @@
 
   // ── 4. 버튼 클릭 한곳에서 처리: 추천 질문 · 좋아요/별로예요 · 복사 ──
   document.addEventListener('click', (event) => {
+    const deleteButton = event.target.closest('[data-delete-conversation]');
+    if (deleteButton) {
+      deleteConversation(deleteButton.dataset.deleteConversation);
+      return;
+    }
+    const conversationButton = event.target.closest('[data-conversation-id]');
+    if (conversationButton) {
+      openConversation(conversationButton.dataset.conversationId);
+      return;
+    }
     const promptButton = event.target.closest('[data-prompt]');
     if (promptButton) {
       insertPrompt(promptButton.dataset.prompt);
@@ -584,6 +663,7 @@
     }
   });
 
+  renderConversationList();
   loadProjects();
 </script>
 </body>

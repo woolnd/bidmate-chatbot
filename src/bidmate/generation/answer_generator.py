@@ -60,9 +60,14 @@ def generate_answer(
 
     # 1. 찾은 조각이 없으면 AI를 부르지 않고 "찾은 문서에 없다"고 돌려준다 (비용 0원)
     if len(chunks) == 0:
-        return AnswerResult(answer=NO_EVIDENCE_ANSWER, source_project_names=[], has_evidence=False)
+        return AnswerResult(
+            answer=NO_EVIDENCE_ANSWER,
+            source_project_names=[],
+            has_evidence=False,
+            is_rfp_question=True,
+        )
 
-    # 2. 대화 기록은 최근 MAX_HISTORY_TURNS번(3번)만 넘긴다
+    # 2. 대화 기록은 최근 MAX_HISTORY_TURNS번(5번)만 넘긴다
     recent_history = chat_history[-MAX_HISTORY_TURNS:]
 
     # 3. 메시지 만들기: [시스템 메시지(고정), 사람 메시지(대화 기록 → 찾은 조각 → 질문)]
