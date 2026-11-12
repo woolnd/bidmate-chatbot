@@ -14,6 +14,7 @@ from langchain_openai import ChatOpenAI
 from bidmate.config import (
     ANSWER_MODEL_NAME,
     MAX_HISTORY_TURNS,
+    OPENAI_TIMEOUT_SECONDS,
     REWRITE_MAX_TOKENS,
     REWRITE_REASONING_EFFORT,
     USE_QUESTION_REWRITE,
@@ -33,6 +34,7 @@ def make_rewrite_model() -> ChatOpenAI:
         model=ANSWER_MODEL_NAME,
         reasoning_effort=REWRITE_REASONING_EFFORT,
         max_completion_tokens=REWRITE_MAX_TOKENS,
+        timeout=OPENAI_TIMEOUT_SECONDS,
     )
 
     return model
