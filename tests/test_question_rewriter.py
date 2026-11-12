@@ -25,7 +25,7 @@ def test_rewrites_with_history_and_strips_quotes():
 
 
 def test_passes_only_recent_turns(monkeypatch):
-    # 대화 기록이 5번이어도 AI에게는 최근 3번만 넘긴다
+    # 대화 기록이 7번이어도 AI에게는 최근 5번만 넘긴다
     passed_histories = []
     original_build = question_rewriter.build_rewrite_messages
 
@@ -34,10 +34,10 @@ def test_passes_only_recent_turns(monkeypatch):
         return original_build(question, recent_history)
 
     monkeypatch.setattr(question_rewriter, "build_rewrite_messages", recording_build)
-    five_turns = [(f"질문{i}", f"답변{i}") for i in range(5)]
-    rewrite_question("그럼 예산은?", five_turns, FakeListChatModel(responses=[REWRITTEN]))
+    seven_turns = [(f"질문{i}", f"답변{i}") for i in range(7)]
+    rewrite_question("그럼 예산은?", seven_turns, FakeListChatModel(responses=[REWRITTEN]))
 
-    assert passed_histories == [five_turns[-3:]]
+    assert passed_histories == [seven_turns[-5:]]
 
 
 def test_empty_response_falls_back_to_question():

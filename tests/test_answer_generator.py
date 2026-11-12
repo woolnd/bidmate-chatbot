@@ -16,6 +16,7 @@ FAKE_RESULT = AnswerResult(
     answer="사업 예산은 150,000,000원입니다.",
     source_project_names=["통합 이러닝 플랫폼 구축"],
     has_evidence=True,
+    is_rfp_question=True,
 )
 
 
@@ -70,12 +71,12 @@ def test_message_order_fixed_part_first():
 
 
 def test_passes_only_recent_turns():
-    # 대화 기록이 5번이어도 AI에게는 최근 3번만 넘긴다
+    # 대화 기록이 7번이어도 AI에게는 최근 5번만 넘긴다
     received_messages = []
-    five_turns = [(f"이전질문{i}", f"이전답변{i}") for i in range(5)]
-    generate_answer("예산은?", make_chunks(1), five_turns, make_recording_model(received_messages))
+    seven_turns = [(f"이전질문{i}", f"이전답변{i}") for i in range(7)]
+    generate_answer("예산은?", make_chunks(1), seven_turns, make_recording_model(received_messages))
 
     text = received_messages[0][1].content
     assert "이전질문0" not in text
     assert "이전질문1" not in text
-    assert all(f"이전질문{i}" in text for i in (2, 3, 4))
+    assert all(f"이전질문{i}" in text for i in (2, 3, 4, 5, 6))

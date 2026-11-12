@@ -11,7 +11,9 @@ from bidmate.pipeline.graph import run_chatbot
 from bidmate.schemas import AnswerResult
 
 FAKE_CHUNK = (Document(page_content="[가나다공단 / 이러닝] 예산 1억", metadata={}), 0.1)
-FAKE_ANSWER = AnswerResult(answer="1억입니다.", source_project_names=["이러닝"], has_evidence=True)
+FAKE_ANSWER = AnswerResult(
+    answer="1억입니다.", source_project_names=["이러닝"], has_evidence=True, is_rfp_question=True
+)
 
 
 def test_four_steps_run_in_order_and_pass_values(monkeypatch):

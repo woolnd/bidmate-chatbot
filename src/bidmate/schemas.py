@@ -65,6 +65,10 @@ class AnswerResult(BaseModel):
         description="답의 근거가 된 조각의 사업명 목록. 근거가 없으면 빈 목록."
     )
     has_evidence: bool = Field(description="찾은 조각에 답의 근거가 있으면 true, 없으면 false.")
+    is_rfp_question: bool = Field(
+        description="질문이 공공기관 RFP·입찰에 관한 것이면 true. "
+        "인사나 챗봇 소개처럼 RFP와 관계없는 질문이면 false. 화면이 근거 안내를 숨길 때 쓴다."
+    )
 
 
 class ChatState(TypedDict, total=False):

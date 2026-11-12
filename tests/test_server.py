@@ -25,7 +25,10 @@ FAKE_STATE = {
         )
     ],
     "answer_result": AnswerResult(
-        answer="1억입니다.", source_project_names=["이러닝"], has_evidence=True
+        answer="1억입니다.",
+        source_project_names=["이러닝"],
+        has_evidence=True,
+        is_rfp_question=True,
     ),
 }
 

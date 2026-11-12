@@ -70,6 +70,7 @@ class ChatResponse(BaseModel):
     answer: str
     source_project_names: list[str]
     has_evidence: bool
+    is_rfp_question: bool  # false면 인사·챗봇 소개 → 화면이 근거 안내를 숨긴다
     rewritten_question: str
     chunks: list[ChunkView]
     seconds: float
@@ -179,6 +180,7 @@ def chat(chat_request: ChatRequest) -> ChatResponse:
         answer=answer_result.answer,
         source_project_names=answer_result.source_project_names,
         has_evidence=answer_result.has_evidence,
+        is_rfp_question=answer_result.is_rfp_question,
         rewritten_question=state["rewritten_question"],
         chunks=chunk_views,
         seconds=round(seconds, 2),
