@@ -357,6 +357,9 @@ def _is_agency_wide_query(project_query_tokens: set[str]) -> bool:
         "관련",
         "알려줘",
         "보여줘",
+        "나머지",
+        "다른",
+        "다른사업",
     }
     return not project_query_tokens or project_query_tokens <= generic_terms
 
@@ -368,19 +371,39 @@ def find_project_ids(
     """기관 및 사업명 근거를 바탕으로 관련 문서 ID를 반환한다.
 
     기관명만 식별된 질문은 해당 기관의 전체 후보를 반환한다.
-    사업 식별 단어가 포함됐지만 일치하는 사업이 없으면 빈 목록을 반환해
-    기관 내 무관한 사업이 검색되는 것을 방지한다.
+    기관은 맞지만 사업명 후보가 없을 때도 같은 기관의 전체 후보를 반환한다.
+    반환값은 후속 검색 범위이며, 질문에 나온 사업이 실제로 있다는 뜻은 아니다.
     """
+    return _find_project_ids(question, projects, allow_agency_fallback=True)
+
+
+def _find_project_ids(
+    question: str,
+    projects: list[ProjectInfo],
+    *,
+    allow_agency_fallback: bool,
+    inherited_agencies: list[str] | None = None,
+) -> list[str]:
+    """문서 ID를 고른다. 제외 대상과 추가 사업 검색에서는 기관 확장을 막는다."""
     question = _normalize(question)
+    inherited_agencies = inherited_agencies or []
     exclusion = re.split(r"말고|제외하고|빼고", question, maxsplit=1)
     if len(exclusion) == 2:
-        before_agencies = _get_agency_matches(exclusion[0], projects)
+        before_agencies = _get_agency_matches(exclusion[0], projects) or inherited_agencies
         after_agencies = _get_agency_matches(exclusion[1], projects)
         if before_agencies and not after_agencies:
             projects = [p for p in projects if p.agency_name in before_agencies]
-        excluded_ids = set(find_project_ids(exclusion[0], projects))
+            inherited_agencies = before_agencies
+        excluded_ids = set(
+            _find_project_ids(
+                exclusion[0],
+                projects,
+                allow_agency_fallback=False,
+                inherited_agencies=before_agencies,
+            )
+        )
         projects = [p for p in projects if p.project_id not in excluded_ids]
-        if not _tokenize(exclusion[1]) and before_agencies:
+        if _is_agency_wide_query(_tokenize(exclusion[1])) and before_agencies:
             return list(dict.fromkeys(p.project_id for p in projects if p.project_id.strip()))
         question = exclusion[1].strip()
     projects = [project for project in projects if project.project_id.strip()]
@@ -398,7 +421,7 @@ def find_project_ids(
     if total_documents == 0:
         return []
 
-    matched_agencies = _get_agency_matches(question, projects)
+    matched_agencies = _get_agency_matches(question, projects) or inherited_agencies
 
     if matched_agencies:
         search_projects = [
@@ -466,7 +489,14 @@ def find_project_ids(
         if matched_agencies:
             remaining_tokens -= agency_tokens
         extra_ids = (
-            find_project_ids(remainder, search_projects) if remaining_tokens - ACTION_WORDS else []
+            _find_project_ids(
+                remainder,
+                search_projects,
+                allow_agency_fallback=False,
+                inherited_agencies=matched_agencies,
+            )
+            if remaining_tokens - ACTION_WORDS and not _is_agency_wide_query(remaining_tokens)
+            else []
         )
         return list(dict.fromkeys([p.project_id for p in exact_titles] + extra_ids))
 
@@ -556,6 +586,9 @@ def find_project_ids(
         candidates.append((project.project_id, score))
 
     if not candidates:
+        # 사업을 좁히지 못해도 확인한 기관의 범위 안에서 검색을 이어간다.
+        if matched_agencies and allow_agency_fallback:
+            return list(dict.fromkeys(project.project_id for project in search_projects))
         return []
 
     candidates.sort(key=lambda item: item[1], reverse=True)
