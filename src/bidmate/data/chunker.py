@@ -32,14 +32,14 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 def split_document(raw_text: str, project: dict[str, Any]) -> list[Document]:
-    """긴 텍스트를 규칙에 맞게 1000 글자 크기로 자르고 머리말과 메타데이터를 붙인다."""
+    """긴 텍스트를 문장/문단 단위 흐름을 유지하며 최대 1000자 크기로 자르고 메타데이터를 붙인다."""
     project_id = project["project_id"]
     agency_name = project["agency_name"]
     project_name = project["project_name"]
     
     chunks: list[Document] = []
     
-    # 청크 사이즈 1000, 오버랩 200으로 설정 (문맥이 끊기는 것을 방지하기 위해 겹치는 구간 둠)
+    # 문단(\n\n), 줄바꿈(\n), 공백 순으로 우선순위를 두어 자연스럽게 1000자 이내로 쪼갬
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
         chunk_overlap=200,
