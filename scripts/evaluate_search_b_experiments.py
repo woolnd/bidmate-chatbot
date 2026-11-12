@@ -32,11 +32,35 @@ OUTPUT_DIR = ROOT_DIR / "reports" / "search_b_experiment"
 
 # 검색에 사용되더라도 사업 식별력이 낮은 일반 단어
 STOP_WORDS = {
-    "사업", "사업명", "사업비", "사업금액", "기간", "예산",
-    "마감일", "계약", "방식", "시스템", "용역", "운영",
-    "구축", "및", "등", "관련", "대한", "통한", "위한",
-    "긴급", "재공고", "입찰", "입찰공고", "협상",
-    "제안서", "제출", "안내", "공고", "정보",
+    "사업",
+    "사업명",
+    "사업비",
+    "사업금액",
+    "기간",
+    "예산",
+    "마감일",
+    "계약",
+    "방식",
+    "시스템",
+    "용역",
+    "운영",
+    "구축",
+    "및",
+    "등",
+    "관련",
+    "대한",
+    "통한",
+    "위한",
+    "긴급",
+    "재공고",
+    "입찰",
+    "입찰공고",
+    "협상",
+    "제안서",
+    "제출",
+    "안내",
+    "공고",
+    "정보",
 }
 
 STOP_WORDS.update(
@@ -91,25 +115,19 @@ BENCHMARK = [
     {
         "id": "Q03",
         "question": "한국가스공사 차세대 통합정보시스템 ERP 구축",
-        "expected_rules": [
-            {"agency_contains": "한국가스공사", "project_contains": "ERP"}
-        ],
+        "expected_rules": [{"agency_contains": "한국가스공사", "project_contains": "ERP"}],
         "reason": "정식 기관명 및 사업 식별",
     },
     {
         "id": "Q04",
         "question": "가스공사 ERP 구축",
-        "expected_rules": [
-            {"agency_contains": "한국가스공사", "project_contains": "ERP"}
-        ],
+        "expected_rules": [{"agency_contains": "한국가스공사", "project_contains": "ERP"}],
         "reason": "기관 약칭",
     },
     {
         "id": "Q05",
         "question": "인천공항운영서비스 차세대 ERP 시스템 구축",
-        "expected_rules": [
-            {"agency_contains": "인천공항운영서비스", "project_contains": "ERP"}
-        ],
+        "expected_rules": [{"agency_contains": "인천공항운영서비스", "project_contains": "ERP"}],
         "reason": "기관 불일치 오검색 차단",
     },
     {
@@ -276,10 +294,14 @@ BENCHMARK = [
 
 def compact(value: str) -> str:
     """유니코드와 법인 표기를 정규화한 비교 문자열."""
-    normalized = unicodedata.normalize(
-        "NFKC",
-        str(value),
-    ).casefold().strip()
+    normalized = (
+        unicodedata.normalize(
+            "NFKC",
+            str(value),
+        )
+        .casefold()
+        .strip()
+    )
 
     # 법인 표기는 기관 식별에 영향을 주지 않도록 제거한다.
     # NFKC 정규화 후 ㈜는 (주), ㈔는 (사)로 통일된다.
@@ -292,32 +314,31 @@ def compact(value: str) -> str:
 
     for suffix in legal_suffixes:
         if normalized.endswith(suffix):
-            normalized = normalized[:-len(suffix)].strip()
+            normalized = normalized[: -len(suffix)].strip()
             break
 
     # 공백·괄호·기호 제거
     return re.sub(r"[^가-힣a-z0-9]", "", normalized)
 
 
-
 def tokenize(value: str) -> set[str]:
     """한국어·영문·숫자 기반 핵심 토큰."""
     tokens = re.findall(r"[가-힣a-z0-9]+", str(value).casefold())
-    return {
-        token
-        for token in tokens
-        if token not in STOP_WORDS and len(token) > 1
-    }
+    return {token for token in tokens if token not in STOP_WORDS and len(token) > 1}
 
 
 def get_agency_matches(question: str, projects: list[Any]) -> list[str]:
     """실험용 기관 식별. 운영 코드와 동일한 정규화 정책을 적용한다."""
 
     def agency_key(value: str) -> str:
-        normalized = unicodedata.normalize(
-            "NFKC",
-            str(value),
-        ).casefold().strip()
+        normalized = (
+            unicodedata.normalize(
+                "NFKC",
+                str(value),
+            )
+            .casefold()
+            .strip()
+        )
 
         normalized = re.sub(
             r"\s*\(\s*용역\s*\)\s*$|\s+용역\s*$",
@@ -351,11 +372,7 @@ def get_agency_matches(question: str, projects: list[Any]) -> list[str]:
         if not alias_key or alias_key not in question_key:
             continue
 
-        targets = [
-            agency
-            for agency in agencies
-            if agency_key(agency) == canonical_key
-        ]
+        targets = [agency for agency in agencies if agency_key(agency) == canonical_key]
 
         if len(targets) != 1:
             continue
@@ -363,9 +380,7 @@ def get_agency_matches(question: str, projects: list[Any]) -> list[str]:
         target = targets[0]
 
         embedded_in_other_agency = any(
-            alias_key in agency_key(agency)
-            and agency != target
-            for agency in matched
+            alias_key in agency_key(agency) and agency != target for agency in matched
         )
 
         if not embedded_in_other_agency and target not in matched:
@@ -411,11 +426,7 @@ def run_experiment_b(
     if not agencies:
         return baseline_ids, "NO_AGENCY_USE_A"
 
-    agency_projects = [
-        project
-        for project in projects
-        if project.agency_name in agencies
-    ]
+    agency_projects = [project for project in projects if project.agency_name in agencies]
 
     if not agency_projects:
         return [], "AGENCY_NOT_FOUND"
@@ -445,11 +456,7 @@ def run_experiment_b(
     ]
 
     # 식별력 있는 사업 표현이 확인된 경우 관련 후보만 반환
-    matched = [
-        (project, score)
-        for project, score in scores
-        if score >= 0.50
-    ]
+    matched = [(project, score) for project, score in scores if score >= 0.50]
 
     if matched:
         matched.sort(key=lambda item: item[1], reverse=True)
@@ -482,9 +489,7 @@ def resolve_expected_ids(
         ]
 
         if not matches:
-            unresolved.append(
-                f"{rule['agency_contains']} / {rule['project_contains']}"
-            )
+            unresolved.append(f"{rule['agency_contains']} / {rule['project_contains']}")
 
         expected.update(project.project_id for project in matches)
 
@@ -492,7 +497,6 @@ def resolve_expected_ids(
         return expected, "UNRESOLVED: " + " | ".join(unresolved)
 
     return expected, "OK"
-
 
 
 def calculate_metrics(
@@ -577,17 +581,11 @@ def evaluate(projects: list[Any]) -> list[dict[str, Any]]:
         # 기관 후보 확장 자체를 평가하는 별도 케이스
         if evaluation_type == "agency_pool":
             agency_key = compact(case["expected_agency"])
-            agency_ids = {
-                p.project_id
-                for p in projects
-                if agency_key in compact(p.agency_name)
-            }
+            agency_ids = {p.project_id for p in projects if agency_key in compact(p.agency_name)}
             expected = agency_ids
             resolved = bool(agency_ids)
             resolution = (
-                f"AGENCY_POOL_SIZE={len(agency_ids)}"
-                if agency_ids
-                else "UNRESOLVED_AGENCY"
+                f"AGENCY_POOL_SIZE={len(agency_ids)}" if agency_ids else "UNRESOLVED_AGENCY"
             )
 
         # A: 기존 운영 코드
@@ -599,59 +597,50 @@ def evaluate(projects: list[Any]) -> list[dict[str, Any]]:
         a_metrics = calculate_metrics(expected, a_ids)
         b_metrics = calculate_metrics(expected, b_ids)
 
-        a_issue = classify_issue(
-            expected, a_ids, resolved, evaluation_type
-        )
-        b_issue = classify_issue(
-            expected, b_ids, resolved, evaluation_type
-        )
+        a_issue = classify_issue(expected, a_ids, resolved, evaluation_type)
+        b_issue = classify_issue(expected, b_ids, resolved, evaluation_type)
 
-        rows.append({
-            "case_id": case["id"],
-            "question": question,
-            "reason": case["reason"],
-            "evaluation_type": evaluation_type,
-            "ground_truth_status": resolution,
-            "expected_ids": sorted(expected),
-            "a_ids": a_ids,
-            "b_ids": b_ids,
-            "b_strategy": b_strategy,
-            "a_top1_correct": a_metrics["top1_correct"],
-            "b_top1_correct": b_metrics["top1_correct"],
-            "a_precision_at_3": a_metrics["precision_at_k"],
-            "b_precision_at_3": b_metrics["precision_at_k"],
-            "a_recall": a_metrics["recall"],
-            "b_recall": b_metrics["recall"],
-            "a_false_positive_ids": a_metrics["false_positive_ids"],
-            "b_false_positive_ids": b_metrics["false_positive_ids"],
-            "a_false_negative_ids": a_metrics["false_negative_ids"],
-            "b_false_negative_ids": b_metrics["false_negative_ids"],
-            "a_issue": a_issue,
-            "b_issue": b_issue,
-        })
+        rows.append(
+            {
+                "case_id": case["id"],
+                "question": question,
+                "reason": case["reason"],
+                "evaluation_type": evaluation_type,
+                "ground_truth_status": resolution,
+                "expected_ids": sorted(expected),
+                "a_ids": a_ids,
+                "b_ids": b_ids,
+                "b_strategy": b_strategy,
+                "a_top1_correct": a_metrics["top1_correct"],
+                "b_top1_correct": b_metrics["top1_correct"],
+                "a_precision_at_3": a_metrics["precision_at_k"],
+                "b_precision_at_3": b_metrics["precision_at_k"],
+                "a_recall": a_metrics["recall"],
+                "b_recall": b_metrics["recall"],
+                "a_false_positive_ids": a_metrics["false_positive_ids"],
+                "b_false_positive_ids": b_metrics["false_positive_ids"],
+                "a_false_negative_ids": a_metrics["false_negative_ids"],
+                "b_false_negative_ids": b_metrics["false_negative_ids"],
+                "a_issue": a_issue,
+                "b_issue": b_issue,
+            }
+        )
 
     return rows
-
 
 
 def summarize(rows: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
     """긍정 질문과 부정 질문을 분리해 평가 지표를 계산한다."""
 
     supervised = [
-        row for row in rows
-        if row["evaluation_type"] == "supervised"
-        and row["ground_truth_status"] == "OK"
+        row
+        for row in rows
+        if row["evaluation_type"] == "supervised" and row["ground_truth_status"] == "OK"
     ]
 
-    positive_rows = [
-        row for row in supervised
-        if row["expected_ids"]
-    ]
+    positive_rows = [row for row in supervised if row["expected_ids"]]
 
-    negative_rows = [
-        row for row in supervised
-        if not row["expected_ids"]
-    ]
+    negative_rows = [row for row in supervised if not row["expected_ids"]]
 
     tp = fp = fn = 0
     top1_correct_count = 0
@@ -691,49 +680,18 @@ def summarize(rows: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
         "evaluated_questions": total_questions,
         "positive_questions": positive_count,
         "negative_questions": negative_count,
-
-        "top1_accuracy": (
-            top1_correct_count / total_questions
-            if total_questions else 0.0
-        ),
-
-        "micro_precision": (
-            tp / (tp + fp)
-            if tp + fp else 0.0
-        ),
-
-        "micro_recall": (
-            tp / (tp + fn)
-            if tp + fn else 0.0
-        ),
-
-        "micro_f1": (
-            2 * tp / (2 * tp + fp + fn)
-            if 2 * tp + fp + fn else 0.0
-        ),
-
+        "top1_accuracy": (top1_correct_count / total_questions if total_questions else 0.0),
+        "micro_precision": (tp / (tp + fp) if tp + fp else 0.0),
+        "micro_recall": (tp / (tp + fn) if tp + fn else 0.0),
+        "micro_f1": (2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else 0.0),
         # P@3와 Recall 평균은 정답이 있는 질문만 대상으로 한다.
-        "mean_precision_at_3": (
-            precision_sum / positive_count
-            if positive_count else 0.0
-        ),
-
-        "mean_recall": (
-            recall_sum / positive_count
-            if positive_count else 0.0
-        ),
-
+        "mean_precision_at_3": (precision_sum / positive_count if positive_count else 0.0),
+        "mean_recall": (recall_sum / positive_count if positive_count else 0.0),
         # 정답이 없는 질문에 대한 별도 평가
-        "negative_accuracy": (
-            negative_true_negative / negative_count
-            if negative_count else 0.0
-        ),
-
+        "negative_accuracy": (negative_true_negative / negative_count if negative_count else 0.0),
         # 오검색 결과가 하나라도 나온 부정 질문의 개수
         "negative_false_positive": negative_false_positive,
-
         "negative_true_negative": negative_true_negative,
-
         "tp": tp,
         "fp": fp,
         "fn": fn,
@@ -744,15 +702,27 @@ def write_csv(rows: list[dict[str, Any]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     columns = [
-        "case_id", "question", "reason", "evaluation_type",
-        "ground_truth_status", "expected_ids",
-        "a_ids", "b_ids", "b_strategy",
-        "a_top1_correct", "b_top1_correct",
-        "a_precision_at_3", "b_precision_at_3",
-        "a_recall", "b_recall",
-        "a_false_positive_ids", "b_false_positive_ids",
-        "a_false_negative_ids", "b_false_negative_ids",
-        "a_issue", "b_issue",
+        "case_id",
+        "question",
+        "reason",
+        "evaluation_type",
+        "ground_truth_status",
+        "expected_ids",
+        "a_ids",
+        "b_ids",
+        "b_strategy",
+        "a_top1_correct",
+        "b_top1_correct",
+        "a_precision_at_3",
+        "b_precision_at_3",
+        "a_recall",
+        "b_recall",
+        "a_false_positive_ids",
+        "b_false_positive_ids",
+        "a_false_negative_ids",
+        "b_false_negative_ids",
+        "a_issue",
+        "b_issue",
     ]
 
     with path.open("w", encoding="utf-8-sig", newline="") as file:
@@ -819,11 +789,13 @@ def write_report(
             f"| {row['b_strategy']} |"
         )
 
-    lines.extend([
-        "",
-        "## 3. 오검색(False Positive)",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## 3. 오검색(False Positive)",
+            "",
+        ]
+    )
 
     for row in rows:
         if row["evaluation_type"] != "supervised":
@@ -834,10 +806,12 @@ def write_report(
             lines.append(f"- B 오검색 ID: {row['b_false_positive_ids']}")
             lines.append("")
 
-    lines.extend([
-        "## 4. 검색 누락(False Negative)",
-        "",
-    ])
+    lines.extend(
+        [
+            "## 4. 검색 누락(False Negative)",
+            "",
+        ]
+    )
 
     for row in rows:
         if row["evaluation_type"] != "supervised":
@@ -848,42 +822,47 @@ def write_report(
             lines.append(f"- B 누락 ID: {row['b_false_negative_ids']}")
             lines.append("")
 
-    lines.extend([
-        "## 5. 정답 데이터 검증 필요 항목",
-        "",
-    ])
+    lines.extend(
+        [
+            "## 5. 정답 데이터 검증 필요 항목",
+            "",
+        ]
+    )
 
     unresolved = [
-        row for row in rows
-        if row["ground_truth_status"] != "OK"
-        and row["evaluation_type"] == "supervised"
+        row
+        for row in rows
+        if row["ground_truth_status"] != "OK" and row["evaluation_type"] == "supervised"
     ]
 
     if unresolved:
         for row in unresolved:
-            lines.append(
-                f"- {row['case_id']}: {row['ground_truth_status']}"
-            )
+            lines.append(f"- {row['case_id']}: {row['ground_truth_status']}")
     else:
         lines.append("- 미해결 정답 규칙 없음")
 
-    lines.extend([
-        "",
-        "## 6. 해석 시 주의사항",
-        "",
-        (
-            "- 기관 후보 확장 케이스는 실제 정답을 확정한 평가가 아니라 "
-            "후보 확보 여부를 확인하는 진단이다."
-        ),
-        "- 정답이 여러 개인 질문은 사전에 지정한 복수 정답을 기준으로 평가한다.",
-        (
-            "- 이 벤치마크의 점수는 등록된 질문에 대한 결과이며 "
-            "전체 자연어 질문 성능을 보장하지 않는다."
-        ),
-        "- B의 후보 개수가 많아졌다고 정확도가 높아진 것은 아니다. FP와 FN을 함께 비교해야 한다.",
-        "- 정답 규칙이 데이터에서 해결되지 않은 질문은 성능 계산에서 제외한다.",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## 6. 해석 시 주의사항",
+            "",
+            (
+                "- 기관 후보 확장 케이스는 실제 정답을 확정한 평가가 아니라 "
+                "후보 확보 여부를 확인하는 진단이다."
+            ),
+            "- 정답이 여러 개인 질문은 사전에 지정한 복수 정답을 기준으로 평가한다.",
+            (
+                "- 이 벤치마크의 점수는 등록된 질문에 대한 결과이며 "
+                "전체 자연어 질문 성능을 보장하지 않는다."
+            ),
+            (
+                "- B의 후보 개수가 많아졌다고 정확도가 높아진 것은 아니다. "
+                "FP와 FN을 함께 비교해야 한다."
+            ),
+            "- 정답 규칙이 데이터에서 해결되지 않은 질문은 성능 계산에서 제외한다.",
+            "",
+        ]
+    )
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")

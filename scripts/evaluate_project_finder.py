@@ -29,9 +29,7 @@ def load_projects(csv_path: Path) -> list[ProjectInfo]:
     """CSV를 ProjectInfo 목록으로 변환한다."""
 
     if not csv_path.exists():
-        raise FileNotFoundError(
-            f"CSV 파일을 찾을 수 없습니다: {csv_path}"
-        )
+        raise FileNotFoundError(f"CSV 파일을 찾을 수 없습니다: {csv_path}")
 
     projects: list[ProjectInfo] = []
 
@@ -54,9 +52,7 @@ def load_projects(csv_path: Path) -> list[ProjectInfo]:
         missing_columns = required_columns - actual_columns
 
         if missing_columns:
-            raise ValueError(
-                f"CSV 필수 컬럼이 없습니다: {sorted(missing_columns)}"
-            )
+            raise ValueError(f"CSV 필수 컬럼이 없습니다: {sorted(missing_columns)}")
 
         for row_number, row in enumerate(reader, start=2):
             project_id = (row.get("파일명") or "").strip()
@@ -64,10 +60,7 @@ def load_projects(csv_path: Path) -> list[ProjectInfo]:
             project_name = (row.get("사업명") or "").strip()
 
             if not project_id or not agency_name or not project_name:
-                print(
-                    f"[경고] {row_number}행 필수값 누락: "
-                    f"project_id={project_id!r}"
-                )
+                print(f"[경고] {row_number}행 필수값 누락: project_id={project_id!r}")
                 continue
 
             projects.append(
@@ -76,10 +69,7 @@ def load_projects(csv_path: Path) -> list[ProjectInfo]:
                     agency_name=agency_name,
                     project_name=project_name,
                     budget=parse_budget(row.get("사업 금액")),
-                    deadline=(
-                        (row.get("입찰 참여 마감일") or "").strip()
-                        or None
-                    ),
+                    deadline=((row.get("입찰 참여 마감일") or "").strip() or None),
                 )
             )
 
@@ -154,9 +144,7 @@ def main() -> int:
         return 1
 
     print("\n[2] 자기 문서 검색 검사")
-    success, misses, multiples, problems = evaluate_self_search(
-        projects
-    )
+    success, misses, multiples, problems = evaluate_self_search(projects)
 
     print(f"자기 문서 검색 성공: {success}")
     print(f"자기 문서 검색 실패: {misses}")
@@ -182,11 +170,7 @@ def main() -> int:
             print(f"검색 결과 수: {len(results)}")
 
             for result in results:
-                marker = (
-                    "  [기대 문서]"
-                    if result == problem["expected"]
-                    else "  [추가 후보]"
-                )
+                marker = "  [기대 문서]" if result == problem["expected"] else "  [추가 후보]"
                 print(f"- {result}{marker}")
 
     print("\n[4] 최종 요약")

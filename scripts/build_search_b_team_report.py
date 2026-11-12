@@ -158,12 +158,8 @@ def result_table(rows: list[dict[str, str]]) -> str:
 
         issue = row.get("b_issue") or row.get("a_issue") or ""
         is_q05 = case_id == "Q05"
-        has_error = any(
-            value != "-" for value in (a_fn, b_fn, a_fp, b_fp)
-        )
-        row_class = "critical-row" if is_q05 else (
-            "issue-row" if has_error else ""
-        )
+        has_error = any(value != "-" for value in (a_fn, b_fn, a_fp, b_fp))
+        row_class = "critical-row" if is_q05 else ("issue-row" if has_error else "")
 
         body.append(
             f"""
@@ -198,10 +194,7 @@ def check_table() -> str:
 
 
 def build_html(rows: list[dict[str, str]]) -> str:
-    evaluated = [
-        row for row in rows
-        if row.get("evaluation_type") != "AGENCY_POOL_DIAGNOSTIC"
-    ]
+    evaluated = [row for row in rows if row.get("evaluation_type") != "AGENCY_POOL_DIAGNOSTIC"]
     return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -415,10 +408,7 @@ footer {{ color:var(--muted); font-size:12px; text-align:center; padding:20px; }
 
 
 def build_markdown(rows: list[dict[str, str]]) -> str:
-    evaluated = [
-        row for row in rows
-        if row.get("evaluation_type") != "AGENCY_POOL_DIAGNOSTIC"
-    ]
+    evaluated = [row for row in rows if row.get("evaluation_type") != "AGENCY_POOL_DIAGNOSTIC"]
     lines = [
         "# Search-B A/B 실험 결과",
         "",
@@ -444,71 +434,73 @@ def build_markdown(rows: list[dict[str, str]]) -> str:
         delta = (b - a) * 100
         lines.append(f"| {name} | {a:.3f} | {b:.3f} | {delta:+.1f}%p |")
 
-    lines.extend([
-        "",
-        "## 3. TP / FP / FN 비교",
-        "",
-        "| 항목 | A | B | 해석 |",
-        "|---|---:|---:|---|",
-        "| TP | 16 | 18 | 정답 검색 증가 |",
-        "| FP | 1 | 1 | 오검색 건수 동일 |",
-        "| FN | 3 | 1 | 정답 문서 누락 감소 |",
-        "",
-        "## 4. 주요 성공 및 실패 사례",
-        "",
-        "| 질문 | A | B | 결과 |",
-        "|---|---|---|---|",
-        "| Q01 철도 예약발매 시스템 개량 | 실패 | 성공 | B에서 정답 검색 |",
-        "| Q04 가스공사 ERP 구축 | 실패 | 성공 | B에서 정답 검색 |",
-        "| Q05 인천공항운영서비스 차세대 ERP | 오검색 | 오검색 | 최우선 개선 대상 |",
-        "| Q13/Q20 삼성전자 스마트폰 개발 | 미반환 | 미반환 | Negative 정답 |",
-        "",
-        "## 5. 현재 확인된 핵심 이슈",
-        "",
-        "- Q05에서 한국가스공사 ERP 문서가 반환되고 실제 인천공항운영서비스 문서가 누락됨.",
-        "- 기관명 인식, 별칭 매칭, 기관 필터링, A fallback 경로를 확인해야 함.",
-        "- 후보 수 증가만으로 품질을 판단하지 않고 FP와 FN을 함께 줄여야 함.",
-        "",
-        "## 6. 산출물 및 검증 현황",
-        "",
-        "| 항목 | 상태 |",
-        "|---|---|",
-        "| A/B 실험 결과 CSV | 생성 완료 |",
-        "| 상세 평가 보고서 | 생성 완료 |",
-        "| 비교 그래프 PNG | 생성 완료 |",
-        "| 공유용 README 초안 | 생성 완료 |",
-        "| 신규 평가 테스트 | 8 passed |",
-        "| 기존 Search-B 테스트 | 9 passed |",
-        "| Ruff | 통과 |",
-        "",
-        "## 7. 평가 시 주의사항",
-        "",
-        "- 평가 가능 질문은 19개이며 Q10은 진단 전용으로 제외함.",
-        "- Q13/Q20은 정답 문서가 없는 Negative 질문임.",
-        "- Micro Recall은 문서 단위, Mean Recall은 질문별 평균이므로 정의가 다름.",
-        "- Precision@3는 Positive 질문을 대상으로 평균 계산함.",
-        "",
-        "## 8. 다음 작업",
-        "",
-        "1. Q05 기관명 매칭 실패 원인 분석",
-        "2. 기관명이 명시된 질문의 타 기관 문서 오검색 방지",
-        "3. Q06, Q08 유사 사업명 사례 점검",
-        "4. 전체 벤치마크 재실행",
-        "5. 그래프와 보고서 갱신",
-        "6. 최종 테스트 후 GitHub 일괄 공유",
-        "",
-        "## 9. 재현 방법",
-        "",
-        "```bash",
-        "uv run python scripts/evaluate_search_b_experiments.py",
-        "uv run python scripts/build_search_b_team_report.py",
-        "open reports/search_b_experiment/team_dashboard.html",
-        "```",
-        "",
-        "> 본 문서는 2026-11-11 실험 결과를 기준으로 작성한 공유용 초안입니다.",
-        "> Q05 개선 및 전체 재평가가 끝나기 전까지 최종 성능으로 확정하지 않습니다.",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## 3. TP / FP / FN 비교",
+            "",
+            "| 항목 | A | B | 해석 |",
+            "|---|---:|---:|---|",
+            "| TP | 16 | 18 | 정답 검색 증가 |",
+            "| FP | 1 | 1 | 오검색 건수 동일 |",
+            "| FN | 3 | 1 | 정답 문서 누락 감소 |",
+            "",
+            "## 4. 주요 성공 및 실패 사례",
+            "",
+            "| 질문 | A | B | 결과 |",
+            "|---|---|---|---|",
+            "| Q01 철도 예약발매 시스템 개량 | 실패 | 성공 | B에서 정답 검색 |",
+            "| Q04 가스공사 ERP 구축 | 실패 | 성공 | B에서 정답 검색 |",
+            "| Q05 인천공항운영서비스 차세대 ERP | 오검색 | 오검색 | 최우선 개선 대상 |",
+            "| Q13/Q20 삼성전자 스마트폰 개발 | 미반환 | 미반환 | Negative 정답 |",
+            "",
+            "## 5. 현재 확인된 핵심 이슈",
+            "",
+            "- Q05에서 한국가스공사 ERP 문서가 반환되고 실제 인천공항운영서비스 문서가 누락됨.",
+            "- 기관명 인식, 별칭 매칭, 기관 필터링, A fallback 경로를 확인해야 함.",
+            "- 후보 수 증가만으로 품질을 판단하지 않고 FP와 FN을 함께 줄여야 함.",
+            "",
+            "## 6. 산출물 및 검증 현황",
+            "",
+            "| 항목 | 상태 |",
+            "|---|---|",
+            "| A/B 실험 결과 CSV | 생성 완료 |",
+            "| 상세 평가 보고서 | 생성 완료 |",
+            "| 비교 그래프 PNG | 생성 완료 |",
+            "| 공유용 README 초안 | 생성 완료 |",
+            "| 신규 평가 테스트 | 8 passed |",
+            "| 기존 Search-B 테스트 | 9 passed |",
+            "| Ruff | 통과 |",
+            "",
+            "## 7. 평가 시 주의사항",
+            "",
+            "- 평가 가능 질문은 19개이며 Q10은 진단 전용으로 제외함.",
+            "- Q13/Q20은 정답 문서가 없는 Negative 질문임.",
+            "- Micro Recall은 문서 단위, Mean Recall은 질문별 평균이므로 정의가 다름.",
+            "- Precision@3는 Positive 질문을 대상으로 평균 계산함.",
+            "",
+            "## 8. 다음 작업",
+            "",
+            "1. Q05 기관명 매칭 실패 원인 분석",
+            "2. 기관명이 명시된 질문의 타 기관 문서 오검색 방지",
+            "3. Q06, Q08 유사 사업명 사례 점검",
+            "4. 전체 벤치마크 재실행",
+            "5. 그래프와 보고서 갱신",
+            "6. 최종 테스트 후 GitHub 일괄 공유",
+            "",
+            "## 9. 재현 방법",
+            "",
+            "```bash",
+            "uv run python scripts/evaluate_search_b_experiments.py",
+            "uv run python scripts/build_search_b_team_report.py",
+            "open reports/search_b_experiment/team_dashboard.html",
+            "```",
+            "",
+            "> 본 문서는 2026-11-11 실험 결과를 기준으로 작성한 공유용 초안입니다.",
+            "> Q05 개선 및 전체 재평가가 끝나기 전까지 최종 성능으로 확정하지 않습니다.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
