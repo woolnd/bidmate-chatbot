@@ -85,7 +85,9 @@ def projects() -> list[ProjectInfo]:
         ),
         (
             "철도 예약발매 시스템 개량 사업",
-            [],
+            [
+                "한국철도공사 (용역)_예약발매시스템 개량 ISMP 용역.hwp",
+            ],
         ),
         (
             "삼성전자 스마트폰 개발 사업 예산은?",
@@ -99,3 +101,49 @@ def test_find_project_ids(
     expected: list[str],
 ) -> None:
     assert find_project_ids(question, projects) == expected
+
+
+def test_railway_official_name_matches_classified_agency(projects):
+    result = find_project_ids(
+        "한국철도공사 입찰 일정은?",
+        projects,
+    )
+
+    assert result == [
+        "한국철도공사 (용역)_예약발매시스템 개량 ISMP 용역.hwp",
+        "한국철도공사 (용역)_모바일오피스 시스템 고도화 용역(총체 및 1차).hwp",
+        "한국철도공사 (용역)_[재공고][긴급][협상형]운행정보기록 자동분석시스.hwp",
+    ]
+
+
+def test_agency_only_question_returns_all_agency_projects(projects):
+    result = find_project_ids(
+        "국민연금공단 사업 마감일은?",
+        projects,
+    )
+
+    assert result == [
+        "국민연금공단_2024년 이러닝시스템 운영 용역.hwp",
+    ]
+
+
+def test_unknown_agency_does_not_return_unrelated_projects(projects):
+    result = find_project_ids(
+        "삼성전자 스마트폰 개발 사업 예산은?",
+        projects,
+    )
+
+    assert result == []
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "국민연금공단 스마트폰 개발 사업 예산은?",
+        "국민연금공단 ERP 구축 마감일은?",
+    ],
+)
+def test_known_agency_with_unmatched_project_terms_returns_no_results(
+    projects: list[ProjectInfo],
+    question: str,
+) -> None:
+    assert find_project_ids(question, projects) == []

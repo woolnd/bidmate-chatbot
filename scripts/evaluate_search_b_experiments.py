@@ -39,6 +39,24 @@ STOP_WORDS = {
     "제안서", "제출", "안내", "공고", "정보",
 }
 
+STOP_WORDS.update(
+    {
+        "일정",
+        "현황",
+        "목록",
+        "조회",
+        "확인",
+        "알려",
+        "언제",
+        "어디",
+        "관련",
+        "찾아",
+        "검색",
+        "입찰",
+    }
+)
+
+
 # 별칭은 현재 데이터 100건에서 유일한 기관을 가리키는지 확인하면서 사용한다.
 AGENCY_ALIASES = {
     "가스공사": "한국가스공사",
@@ -293,40 +311,64 @@ def tokenize(value: str) -> set[str]:
 
 
 def get_agency_matches(question: str, projects: list[Any]) -> list[str]:
-    """질문에 명시된 기관을 데이터의 실제 기관명과 연결한다."""
-    q = compact(question)
+    """실험용 기관 식별. 운영 코드와 동일한 정규화 정책을 적용한다."""
+
+    def agency_key(value: str) -> str:
+        normalized = unicodedata.normalize(
+            "NFKC",
+            str(value),
+        ).casefold().strip()
+
+        normalized = re.sub(
+            r"\s*\(\s*용역\s*\)\s*$|\s+용역\s*$",
+            "",
+            normalized,
+        )
+
+        return compact(normalized)
+
+    question_key = agency_key(question)
+
     agencies = sorted(
-        {p.agency_name for p in projects if p.agency_name},
-        key=lambda value: len(compact(value)),
+        {project.agency_name for project in projects if project.agency_name},
+        key=lambda value: len(agency_key(value)),
         reverse=True,
     )
 
-    matched: list[str] = []
+    matched = []
 
-    # 데이터에 존재하는 정식 기관명 우선 탐색
     for agency in agencies:
-        normalized = compact(agency)
-        if len(normalized) >= 4 and normalized in q:
-            matched.append(agency)
+        key = agency_key(agency)
 
-    # 별칭은 실제 데이터에 대상 기관이 존재할 때만 적용
+        if len(key) >= 4 and key in question_key:
+            if agency not in matched:
+                matched.append(agency)
+
     for alias, canonical in AGENCY_ALIASES.items():
-        alias_compact = compact(alias)
-        canonical_compact = compact(canonical)
+        alias_key = agency_key(alias)
+        canonical_key = agency_key(canonical)
 
-        if alias_compact not in q:
+        if not alias_key or alias_key not in question_key:
             continue
 
-        target = next(
-            (
-                agency
-                for agency in agencies
-                if compact(agency) == canonical_compact
-                or canonical_compact in compact(agency)
-            ),
-            None,
+        targets = [
+            agency
+            for agency in agencies
+            if agency_key(agency) == canonical_key
+        ]
+
+        if len(targets) != 1:
+            continue
+
+        target = targets[0]
+
+        embedded_in_other_agency = any(
+            alias_key in agency_key(agency)
+            and agency != target
+            for agency in matched
         )
-        if target and target not in matched:
+
+        if not embedded_in_other_agency and target not in matched:
             matched.append(target)
 
     return matched
