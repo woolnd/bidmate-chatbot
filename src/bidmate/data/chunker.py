@@ -1,124 +1,88 @@
-"""실제 RFP 문서들을 읽고 자른 뒤 메타데이터를 붙여 저장소(Chroma 등)로 넘기는 파이프라인.
+"""문서를 검색용 조각으로 자르기. 담당: 데이터 파트
 
-프로젝트 가이드라인 기준:
-- 머리말 형식: "[기관명 / 사업명]"
-- 메타데이터 키 4개: chunk_id, project_id, agency_name, project_name
-- 기본 정보 조각의 chunk_id는 '-info'로 끝남
+조각 = 이름표(metadata) + 내용(page_content). LangChain Document로 만든다.
+    page_content  "[기관명 / 사업명]" 머리말 + 본문
+    metadata      chunk_id, project_id, agency_name, project_name
+
+규칙:
+    - 1000자씩 자르고 앞 조각과 200자 겹친다 (시작값. 2주차에 500/1000/1500 비교)
+    - chunk_id = "파일이름-0001" 부터 순서대로
+    - 문서마다 기본 정보 조각 1개 (chunk_id = "파일이름-info").
+      목록표 한 줄(기관명·사업명·예산·마감일)로 만든다. 예산·마감일 질문용
+
+받는 것: LoadedDocument, ProjectInfo
+넘기는 것: Document 목록
+
+실행해 보기 (레포 맨 위 폴더에서 `uv run python`을 켜고 한 줄씩 입력, 끝낼 때 exit()):
+    >>> from bidmate.config import PROJECT_LIST_PATH, RAW_FOLDER
+    >>> from bidmate.data.metadata import load_project_list
+    >>> from bidmate.data.loader import load_document
+    >>> from bidmate.data.chunker import split_document, make_info_chunk
+    >>> projects = load_project_list(PROJECT_LIST_PATH)
+    >>> chunks = split_document(load_document(projects[0], RAW_FOLDER), projects[0])
+    >>> len(chunks)                 # 조각 수
+    >>> print(chunks[0].page_content)   # 머리말 [기관명 / 사업명]이 붙었는지
+    >>> chunks[0].metadata          # 이름표 4칸
+    >>> make_info_chunk(projects[0])    # 기본 정보 조각
 """
 
-from typing import Any
+from __future__ import annotations
 
-from langchain_core.documents import Document
+from typing import TYPE_CHECKING
 
-# config.py 등에서 경로와 설정값을 가져온다고 가정
-# from src.config import PROJECT_LIST_PATH, RAW_FOLDER
-
-
-def load_project_list(path: str) -> list[dict[str, Any]]:
-    """프로젝트 목록표(CSV 등)를 불러온다."""
-    # TODO: 실제 목록표 로드 구현
-    return []
-
-
-def load_document(project: dict[str, Any], raw_folder: str) -> str:
-    """프로젝트 정보에 해당하는 원본 파일(.hwp, .pdf)을 읽어 텍스트를 뽑는다."""
-    # TODO: HWP / PDF 텍스트 추출 구현 (extract_hwp_text 등)
-    return "추출된 원본 텍스트..."
-
-
-from typing import Any
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from bidmate.config import CHUNK_OVERLAP, CHUNK_SIZE
 
-def split_document(raw_text: str, project: dict[str, Any]) -> list[Document]:
-    """긴 텍스트를 문장/문단 단위 흐름을 유지하며 최대 1000자 크기로 자르고 메타데이터를 붙인다."""
-    project_id = project["project_id"]
-    agency_name = project["agency_name"]
-    project_name = project["project_name"]
-    
-    chunks: list[Document] = []
-    
-    # 문단(\n\n), 줄바꿈(\n), 공백 순으로 우선순위를 두어 자연스럽게 1000자 이내로 쪼갬
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-        length_function=len,
-    )
-    
-    # 텍스트 분할 실행
-    text_pieces = text_splitter.split_text(raw_text)
-    
-    for idx, piece in enumerate(text_pieces, start=1):
-        chunk_suffix = f"{idx:04d}" # 0001, 0002 형태
-        chunks.append(
-            Document(
-                page_content=f"[{agency_name} / {project_name}]\n{piece}",
-                metadata={
-                    "chunk_id": f"{project_id}-{chunk_suffix}",
-                    "project_id": project_id,
-                    "agency_name": agency_name,
-                    "project_name": project_name,
-                },
-            )
+if TYPE_CHECKING:
+    # ProjectInfo, LoadedDocument의 칸은 schemas.py에 있다 (11/10 확정)
+    from bidmate.schemas import LoadedDocument, ProjectInfo
+
+# 문단(\n\n) → 줄바꿈(\n) → 띄어쓰기 순서로 끊을 자리를 찾고, 없으면 글자 단위로 자른다
+TEXT_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+
+
+def _make_metadata(project: ProjectInfo, chunk_id: str) -> dict[str, str]:
+    """조각 번호와 사업 정보로 이름표 4칸을 만든다."""
+    return {
+        "chunk_id": chunk_id,
+        "project_id": project.project_id,
+        "agency_name": project.agency_name,
+        "project_name": project.project_name,
+    }
+
+
+def split_document(document: LoadedDocument, project: ProjectInfo) -> list[Document]:
+    """본문을 CHUNK_SIZE자씩, CHUNK_OVERLAP자 겹치게 잘라 조각 목록을 돌려준다."""
+    # 1. 머리말 만들기: "[기관명 / 사업명]"
+    header = f"[{project.agency_name} / {project.project_name}]"
+
+    # 2. 본문을 CHUNK_SIZE자 이하 조각으로 자르기 (앞 조각과 CHUNK_OVERLAP자 겹침)
+    text_pieces = TEXT_SPLITTER.split_text(document.text)
+
+    # 3. 자른 글마다 Document 만들기. chunk_id는 "파일이름-0001"부터
+    return [
+        Document(
+            page_content=f"{header}\n{piece}",
+            metadata=_make_metadata(project, f"{project.project_id}-{number:04d}"),
         )
-        
-    return chunks
+        for number, piece in enumerate(text_pieces, start=1)
+    ]
 
 
-def make_info_chunk(project: dict[str, Any]) -> Document:
-    """사업별 기본 정보 조각을 생성한다 (chunk_id가 -info로 끝남)."""
-    project_id = project["project_id"]
-    agency_name = project["agency_name"]
-    project_name = project["project_name"]
+def make_info_chunk(project: ProjectInfo) -> Document:
+    """목록표 한 줄로 기본 정보 조각 1개를 만든다. 예산·마감일 질문에 쓴다."""
+    # 1. 값이 없으면 "정보 없음"으로 적는다
+    budget = f"{project.budget:,}원" if project.budget else "정보 없음"
+    deadline = project.deadline or "정보 없음"
 
+    # 2. 머리말 + 기본 정보 한 줄. 이름표는 보통 조각과 같고 chunk_id만 "파일이름-info"
     return Document(
-        page_content=f"[{agency_name} / {project_name}]\n기본 정보: 발주 기관 {agency_name} | 예산 ...",
-        metadata={
-            "chunk_id": f"{project_id}-info",
-            "project_id": project_id,
-            "agency_name": agency_name,
-            "project_name": project_name,
-        },
+        page_content=(
+            f"[{project.agency_name} / {project.project_name}]\n"
+            f"기본 정보: 발주 기관 {project.agency_name} | 사업명 {project.project_name} | "
+            f"예산 {budget} | 입찰 마감일 {deadline}"
+        ),
+        metadata=_make_metadata(project, f"{project.project_id}-info"),
     )
-
-
-def save_chunks(all_chunks: list[Document]) -> None:
-    """완성된 조각들을 검색 파트 저장소(Chroma 등)에 저장한다."""
-    # TODO: 검색 파트와 맞춘 save_chunks 함수 연동
-    pass
-
-
-def main() -> None:
-    """문서들을 읽고 자라서 저장하는 메인 파이프라인."""
-    project_list = load_project_list("data/data_list.csv")
-    all_chunks: list[Document] = []
-    failed_files: list[str] = []
-
-    for project in project_list:
-        try:
-            # 1. 파일 읽기 및 텍스트 추출
-            raw_text = load_document(project, "data/raw")
-
-            # 2. 본문 조각 자르기
-            project_chunks = split_document(raw_text, project)
-            all_chunks.extend(project_chunks)
-
-            # 3. 기본 정보 조각 추가
-            info_chunk = make_info_chunk(project)
-            all_chunks.append(info_chunk)
-
-        except Exception as e:
-            # 에러가 나도 멈추지 않고 실패한 파일 이름을 모아둠
-            failed_files.append(project.get("project_id", "unknown"))
-            print(f"Error processing {project.get('project_id')}: {e}")
-
-    # 4. 검색 파트로 전달
-    save_chunks(all_chunks)
-
-    if failed_files:
-        print(f"실패한 파일 목록: {failed_files}")
-
-
-if __name__ == "__main__":
-    main()
