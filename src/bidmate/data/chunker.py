@@ -26,20 +26,31 @@ def load_document(project: dict[str, Any], raw_folder: str) -> str:
     return "추출된 원본 텍스트..."
 
 
+from typing import Any
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+
 def split_document(raw_text: str, project: dict[str, Any]) -> list[Document]:
-    """긴 텍스트를 규칙에 맞게 조각(Document)으로 자르고 머리말과 메타데이터를 붙인다."""
+    """긴 텍스트를 규칙에 맞게 1000 글자 크기로 자르고 머리말과 메타데이터를 붙인다."""
     project_id = project["project_id"]
     agency_name = project["agency_name"]
     project_name = project["project_name"]
-
+    
     chunks: list[Document] = []
-
-    # 예시: 텍스트를 일정 크기로 자르는 로직 (TextSplitter 활용)
-    # text_pieces = text_splitter.split_text(raw_text)
-    text_pieces = [raw_text]  # 임시 예시
-
+    
+    # 청크 사이즈 1000, 오버랩 200으로 설정 (문맥이 끊기는 것을 방지하기 위해 겹치는 구간 둠)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+        length_function=len,
+    )
+    
+    # 텍스트 분할 실행
+    text_pieces = text_splitter.split_text(raw_text)
+    
     for idx, piece in enumerate(text_pieces, start=1):
-        chunk_suffix = f"{idx:04d}"  # 0001, 0002 형태
+        chunk_suffix = f"{idx:04d}" # 0001, 0002 형태
         chunks.append(
             Document(
                 page_content=f"[{agency_name} / {project_name}]\n{piece}",
@@ -51,7 +62,7 @@ def split_document(raw_text: str, project: dict[str, Any]) -> list[Document]:
                 },
             )
         )
-
+        
     return chunks
 
 
