@@ -342,6 +342,25 @@ def _get_agency_matches(
     return matched
 
 
+def _is_agency_wide_query(project_query_tokens: set[str]) -> bool:
+    """기관 전체 검색을 허용하는 일반 질문인지 판단한다."""
+    generic_terms = {
+        "사업",
+        "사업들",
+        "사업목록",
+        "사업정보",
+        "전체",
+        "모든",
+        "목록",
+        "리스트",
+        "요구사항",
+        "관련",
+        "알려줘",
+        "보여줘",
+    }
+    return not project_query_tokens or project_query_tokens <= generic_terms
+
+
 def find_project_ids(
     question: str,
     projects: list[ProjectInfo],
@@ -407,7 +426,7 @@ def find_project_ids(
                 agency_tokens.update(_tokenize(alias))
         project_query_tokens = question_tokens - agency_tokens
 
-        if not project_query_tokens:
+        if _is_agency_wide_query(project_query_tokens):
             return list(dict.fromkeys(project.project_id for project in search_projects))
     else:
         search_projects = projects
@@ -537,14 +556,6 @@ def find_project_ids(
         candidates.append((project.project_id, score))
 
     if not candidates:
-        # 기관명은 맞았는데 사업명 후보가 없으면 해당 기관 사업 전체 반환
-        if matched_agencies:
-            return list(
-                dict.fromkeys(
-                    project.project_id
-                    for project in search_projects
-                )
-            )
         return []
 
     candidates.sort(key=lambda item: item[1], reverse=True)

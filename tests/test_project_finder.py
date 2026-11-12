@@ -135,6 +135,7 @@ def test_unknown_agency_does_not_return_unrelated_projects(projects):
 
     assert result == []
 
+
 @pytest.mark.parametrize(
     "question",
     [
@@ -147,3 +148,30 @@ def test_known_agency_with_unmatched_project_terms_returns_no_results(
     question: str,
 ) -> None:
     assert find_project_ids(question, projects) == []
+
+
+def test_agency_wide_queries_and_unknown_projects():
+    from bidmate.retrieval.project_finder import find_project_ids
+    from bidmate.schemas import ProjectInfo
+
+    projects = [
+        ProjectInfo("water-a", "한국수자원공사", "정보시스템 운영", None, None),
+        ProjectInfo("water-b", "한국수자원공사", "데이터 플랫폼 구축", None, None),
+        ProjectInfo("pension-a", "국민연금공단", "이러닝시스템 운영", None, None),
+    ]
+
+    for question in (
+        "한국수자원공사 사업 알려줘",
+        "한국수자원공사 요구사항",
+        "한국수자원공사 사업 목록",
+    ):
+        assert find_project_ids(question, projects) == [
+            "water-a",
+            "water-b",
+        ]
+
+    for question in (
+        "국민연금공단 스마트폰 개발",
+        "국민연금공단 ERP 구축",
+    ):
+        assert find_project_ids(question, projects) == []
