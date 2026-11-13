@@ -158,8 +158,7 @@ def build_readme() -> str:
             artifact_lines.append(f"- ⚠️ 생성되지 않음: `{path.relative_to(ROOT)}`")
 
     chart_embed = (
-        f"![Search-B A/B benchmark comparison]"
-        f"(reports/search_b_experiment/{chart.name})"
+        f"![Search-B A/B benchmark comparison](reports/search_b_experiment/{chart.name})"
         if chart.exists()
         else "> 성능 그래프가 아직 생성되지 않았습니다."
     )
@@ -194,11 +193,11 @@ Search-B의 핵심 과제는 사용자 질문과 프로젝트 메타데이터 �
 
 | 지표 | Search-A (기존) | Search-B (개선) | 변화 |
 |---|---:|---:|---:|
-| Top-1 Accuracy | {pct(a['top1'])} | {pct(b['top1'])} | **+{delta_top1:.1f}%p** |
-| Precision | {pct(a['precision'])} | {pct(b['precision'])} | **+{(b['precision']-a['precision'])*100:.1f}%p** |
-| Recall | {pct(a['recall'])} | {pct(b['recall'])} | **+{(b['recall']-a['recall'])*100:.1f}%p** |
-| F1 | {pct(a['f1'])} | {pct(b['f1'])} | **+{delta_f1:.1f}%p** |
-| TP / FP / FN | {a['tp']} / {a['fp']} / {a['fn']} | {b['tp']} / {b['fp']} / {b['fn']} | FP·FN 감소 |
+| Top-1 Accuracy | {pct(a["top1"])} | {pct(b["top1"])} | **+{delta_top1:.1f}%p** |
+| Precision | {pct(a["precision"])} | {pct(b["precision"])} | **+{(b["precision"] - a["precision"]) * 100:.1f}%p** |
+| Recall | {pct(a["recall"])} | {pct(b["recall"])} | **+{(b["recall"] - a["recall"]) * 100:.1f}%p** |
+| F1 | {pct(a["f1"])} | {pct(b["f1"])} | **+{delta_f1:.1f}%p** |
+| TP / FP / FN | {a["tp"]} / {a["fp"]} / {a["fn"]} | {b["tp"]} / {b["fp"]} / {b["fn"]} | FP·FN 감소 |
 
 {chart_embed}
 
@@ -218,9 +217,9 @@ Search-B는 질문과 프로젝트 메타데이터를 비교하여 관련 프로
 
 | 항목 | 값 |
 |---|---:|
-| 프로젝트 데이터 | {METRICS['projects']}개 |
-| 벤치마크 질문 | {METRICS['questions_total']}개 |
-| 정량 평가 질문 | {METRICS['questions_evaluated']}개 |
+| 프로젝트 데이터 | {METRICS["projects"]}개 |
+| 벤치마크 질문 | {METRICS["questions_total"]}개 |
+| 정량 평가 질문 | {METRICS["questions_evaluated"]}개 |
 | 진단 전용 질문 | 1개 (Q10) |
 | 부정 질문 | 2개 (Q13, Q20) |
 | 결과 CSV 행 | {csv_count}개 |
@@ -392,26 +391,26 @@ Q05에서 확인된 개선은 단순한 문자열 처리 변경에 그치지 않
 
 | 지표 | Search-A | Search-B | 변화 |
 |---|---:|---:|---:|
-| Top-1 Accuracy | {pct(a['top1'])} | {pct(b['top1'])} | +{delta_top1:.1f}%p |
-| Precision | {pct(a['precision'])} | {pct(b['precision'])} | +{(b['precision']-a['precision'])*100:.1f}%p |
-| Recall | {pct(a['recall'])} | {pct(b['recall'])} | +{(b['recall']-a['recall'])*100:.1f}%p |
-| F1 | {pct(a['f1'])} | {pct(b['f1'])} | +{delta_f1:.1f}%p |
-| TP | {a['tp']} | {b['tp']} | +{b['tp']-a['tp']} |
-| FP | {a['fp']} | {b['fp']} | {b['fp']-a['fp']} |
-| FN | {a['fn']} | {b['fn']} | {b['fn']-a['fn']} |
+| Top-1 Accuracy | {pct(a["top1"])} | {pct(b["top1"])} | +{delta_top1:.1f}%p |
+| Precision | {pct(a["precision"])} | {pct(b["precision"])} | +{(b["precision"] - a["precision"]) * 100:.1f}%p |
+| Recall | {pct(a["recall"])} | {pct(b["recall"])} | +{(b["recall"] - a["recall"]) * 100:.1f}%p |
+| F1 | {pct(a["f1"])} | {pct(b["f1"])} | +{delta_f1:.1f}%p |
+| TP | {a["tp"]} | {b["tp"]} | +{b["tp"] - a["tp"]} |
+| FP | {a["fp"]} | {b["fp"]} | {b["fp"] - a["fp"]} |
+| FN | {a["fn"]} | {b["fn"]} | {b["fn"] - a["fn"]} |
 
 ### 오류 건수 비교
 
 | 오류 유형 | Search-A | Search-B |
 |---|---:|---:|
-| False Positive | {a['fp']} | {b['fp']} |
-| False Negative | {a['fn']} | {b['fn']} |
+| False Positive | {a["fp"]} | {b["fp"]} |
+| False Negative | {a["fn"]} | {b["fn"]} |
 
 **결과 해석**
 
-- Recall이 {pct(a['recall'])}에서 {pct(b['recall'])}로 증가했습니다. 벤치마크에서 정답 후보 누락이 줄어든 결과입니다.
-- Precision이 {pct(a['precision'])}에서 {pct(b['precision'])}로 증가했습니다. 평가 집합에서 오답 후보가 관측되지 않았습니다.
-- F1은 {pct(a['f1'])}에서 {pct(b['f1'])}로 증가했습니다.
+- Recall이 {pct(a["recall"])}에서 {pct(b["recall"])}로 증가했습니다. 벤치마크에서 정답 후보 누락이 줄어든 결과입니다.
+- Precision이 {pct(a["precision"])}에서 {pct(b["precision"])}로 증가했습니다. 평가 집합에서 오답 후보가 관측되지 않았습니다.
+- F1은 {pct(a["f1"])}에서 {pct(b["f1"])}로 증가했습니다.
 - FP와 FN은 각각 1건과 3건에서 0건으로 감소했습니다.
 
 이는 해당 평가 집합에서 관측된 결과입니다. 후보 확장으로 인해 전체 데이터에서 항상 오검색이 감소한다고 단정할 수는 없으며, 더 큰 데이터와 다양한 부정 질문으로 추가 검증해야 합니다.
@@ -420,9 +419,9 @@ Q05에서 확인된 개선은 단순한 문자열 처리 변경에 그치지 않
 
 질문별 상세 결과는 원본 CSV를 기준으로 확인합니다.
 
-- {file_link(csv_path, 'results.csv')} — 질문별 A/B 결과, 정답 ID, 오류 유형 및 평가 정보
-- {file_link(report_md, 'report.md') if report_md.exists() else '`report.md` (미생성)'} — 집계 지표 및 실험 요약
-- {file_link(team_report, 'TEAM_REPORT.md') if team_report.exists() else '`TEAM_REPORT.md` (미생성)'} — 팀 공유용 상세 분석
+- {file_link(csv_path, "results.csv")} — 질문별 A/B 결과, 정답 ID, 오류 유형 및 평가 정보
+- {file_link(report_md, "report.md") if report_md.exists() else "`report.md` (미생성)"} — 집계 지표 및 실험 요약
+- {file_link(team_report, "TEAM_REPORT.md") if team_report.exists() else "`TEAM_REPORT.md` (미생성)"} — 팀 공유용 상세 분석
 
 ### 주요 질문
 
