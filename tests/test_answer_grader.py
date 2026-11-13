@@ -151,3 +151,81 @@ def test_load_questions_reports_mistakes_before_spending(tmp_path):
     assert "모르는 유형 '없는내용'" in message
     assert "Q002: 모범 답이 비어 있다" in message
     assert "질문 번호가 겹친다" in message
+
+
+def make_flaky_judge(failures: int):
+    """처음 failures번은 에러를 내고, 그다음부터 맞음을 돌려주는 가짜 채점 AI."""
+    calls = []
+
+    def fake_judge(messages):
+        calls.append(messages)
+        if len(calls) <= failures:
+            raise ValueError("length limit was reached")
+        return JudgeResult(is_correct=True, reason="가짜 채점")
+
+    return RunnableLambda(fake_judge)
+
+
+def answer_with_budget(question, chat_history):
+    return {"answer_result": make_answer("예산은 1억 2천만 원입니다.")}
+
+
+def test_judge_failure_once_is_retried():
+    # 채점 AI가 한 번 실패해도 다시 채점해서 맞음이 된다
+    result = score([BUDGET_QUESTION], answer_with_budget, make_flaky_judge(failures=1))
+
+    assert result["score"] == 1.0
+    assert result["judge_failed_question_ids"] == []
+
+
+def test_judge_failure_twice_is_not_counted_as_wrong():
+    # 채점 AI가 두 번 다 실패하면 틀림이 아니라 "채점 실패"로 빼고 계산한다
+    result = score(
+        [BUDGET_QUESTION, NO_CONTENT_QUESTION], answer_with_budget, make_flaky_judge(failures=9)
+    )
+
+    assert result["judge_failed_question_ids"] == ["Q001"]
+    assert result["counted"] == 1  # 없는 내용 질문만 채점됨 (AI 안 부름)
+    assert result["wrong_question_ids"] == ["Q002"]  # 근거 있다고 답해서 틀림
+    assert result["rows"][0]["verdict"] == "채점 실패"
+
+
+def test_score_reports_types_seconds_and_rows():
+    # 유형별 점수, 챗봇 답변 시간, 질문별 결과를 같이 돌려준다
+    result = score(
+        [BUDGET_QUESTION, NO_CONTENT_QUESTION], answer_with_budget, make_fake_judge(True)
+    )
+
+    assert result["by_type"] == {"기본 정보": (1, 1), "없는 내용": (0, 1)}
+    assert result["over_limit_count"] == 0
+    assert 0 <= result["average_seconds"] <= result["slowest_seconds"]
+    first_row = result["rows"][0]
+    assert first_row["chatbot_answer"] == "예산은 1억 2천만 원입니다."
+    assert first_row["verdict"] == "맞음"
+    assert first_row["expected_answer"] == "예산은 1억 2천만 원이다."
+
+
+def test_find_failed_stage(monkeypatch):
+    # 고른 문서가 다르면 2단계, 조각에 키워드가 없으면 3단계, 있는데 틀렸으면 4단계
+    from langchain_core.documents import Document
+
+    from bidmate.schemas import ProjectInfo
+    from evaluation import answer_grader
+
+    projects = [ProjectInfo("a.hwp", "가나다공단", "이러닝", None, None)]
+    monkeypatch.setattr(answer_grader, "get_projects", lambda: projects)
+    question_row = {
+        **BUDGET_QUESTION,
+        "expected_project_names": ["이러닝"],
+        "answer_keywords": "1억 2천만",
+    }
+
+    def state(project_ids, text):
+        chunk = Document(page_content=text, metadata={"project_name": "이러닝"})
+        return {"project_ids": project_ids, "chunks": [(chunk, 0.1)]}
+
+    assert answer_grader.find_failed_stage(question_row, state([], "표지")) == "2단계"
+    assert answer_grader.find_failed_stage(question_row, state(["a.hwp"], "표지")) == "3단계"
+    assert (
+        answer_grader.find_failed_stage(question_row, state(["a.hwp"], "예산 1억 2천만")) == "4단계"
+    )
