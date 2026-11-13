@@ -63,4 +63,6 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 # 평가 채점 (evaluation/answer_grader.py)
 JUDGE_MODEL_NAME = "gpt-5-mini"  # 챗봇 답이 모범 답과 맞는지 판단하는 채점 AI
 JUDGE_REASONING_EFFORT = "low"  # 두 답의 핵심 내용을 비교해야 해서 minimal보다 한 단계 위
-JUDGE_MAX_TOKENS = 400  # 맞음/틀림 + 짧은 이유. 생각에 쓴 토큰도 포함된다
+# 맞음/틀림 + 짧은 이유. 생각에 쓴 토큰도 포함된다 (400은 생각만 하다 끝나 채점 실패가 났다)
+JUDGE_MAX_TOKENS = 800
+RESPONSE_TIME_LIMIT_SECONDS = 10  # 질문 1개 응답 목표. 넘는 질문 수를 평가 때 같이 센다

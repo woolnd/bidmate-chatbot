@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import csv
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -77,19 +76,14 @@ def main(questions_path: Path, search_only: bool) -> None:
 
     # 3. 답변 점수 (질문마다 챗봇 답변 + 채점 AI → 돈이 든다)
     if not search_only:
-        start_time = time.perf_counter()
         answer_result = answer_grader.score(answer_grader.load_questions(questions_path))
-        seconds_per_question = (time.perf_counter() - start_time) / max(len(questions), 1)
-        print(
-            f"\n[답변] 정확도 {answer_result['score']:.1%}, "
-            f"질문당 평균 {seconds_per_question:.1f}초"
-        )
-        for question_id, reason in answer_result["wrong_reasons"].items():
-            print(f"  틀림 {question_id}: {reason}")
+        print()
+        answer_grader.print_result(answer_result)
+        answer_grader.save_rows(answer_result["rows"])
+        print(f"질문별 답변 결과: {answer_grader.ANSWER_ROWS_PATH}")
         line["답변_정확도"] = round(answer_result["score"], 3)
-        line["질문당_평균_초"] = round(
-            seconds_per_question, 1
-        )  # 채점 AI 시간 포함이라 실제 응답보다 길다
+        # 11/13부터 챗봇 답변 시간만 (그 전 줄은 채점 AI 시간까지 포함한 값)
+        line["질문당_평균_초"] = round(answer_result["average_seconds"], 1)
         line["답변_틀린_질문"] = " ".join(answer_result["wrong_question_ids"])
 
     # 4. 점수 기록
