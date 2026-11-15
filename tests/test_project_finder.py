@@ -403,3 +403,72 @@ def test_explicit_year_and_round_scope(question, expected):
         ProjectInfo("backup2", "가나다기관", "통합백업센터 구축 2차", None, None),
     ]
     assert find_project_ids(question, projects) == expected
+
+
+def test_unique_full_term_match_wins_over_shared_term():
+    projects = [
+        ProjectInfo("migration", "가나다기관", "클라우드 전환 타당성 검토", None, None),
+        ProjectInfo("monitoring", "가나다기관", "클라우드 관제 통합 개선", None, None),
+    ]
+    assert find_project_ids("가나다기관 클라우드 전환 마감", projects) == ["migration"]
+    assert set(
+        find_project_ids("가나다기관 클라우드 전환과 클라우드 관제 각각 마감", projects)
+    ) == {"migration", "monitoring"}
+
+
+def test_multiple_exclusions_keep_the_original_agency(scoped_projects):
+    projects = [
+        *scoped_projects,
+        ProjectInfo("portal", "가나다기관", "통합 상담창구 개선", None, None),
+    ]
+    result = find_project_ids("가나다기관 문서관리 말고 보안관제도 빼고 나머지", projects)
+    assert result == ["portal"]
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("가나다기관 2026년 보조금 정산 플랫폼 예산", []),
+        ("가나다기관 2025년 보조금 정산 플랫폼 예산", ["edition25"]),
+        ("가나다기관 2024년과 2025년 보조금 정산 플랫폼 예산", ["edition24", "edition25"]),
+    ],
+)
+def test_unversioned_title_does_not_replace_an_edition(question, expected):
+    projects = [
+        ProjectInfo("generic", "가나다기관", "보조금 정산 플랫폼 개발", None, None),
+        ProjectInfo("edition24", "가나다기관", "2024년 보조금 정산 플랫폼 개발", None, None),
+        ProjectInfo("edition25", "가나다기관", "2025년 보조금 정산 플랫폼 개발", None, None),
+    ]
+    assert find_project_ids(question, projects) == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("가나다기관 전자문서관리시스템 운영지원센터 사업 예산", []),
+        ("가나다기관 통합전자문서관리시스템 운영 사업 예산", []),
+        ("가나다기관 전자문서관리시스템 운영사업 예산", ["docs"]),
+        ("가나다기관 전자문서관리시스템 운영의 예산은?", ["docs"]),
+        ("가나다기관 [전자문서관리시스템운영] 예산", ["docs"]),
+    ],
+)
+def test_complete_title_requires_legal_word_boundaries(question, expected):
+    projects = [
+        ProjectInfo("docs", "가나다기관", "전자문서관리시스템 운영", None, None),
+    ]
+    assert find_project_ids(question, projects) == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("가나다기관 보안관제 사업의 부가세를 빼고 예산이 얼마인가요?", ["security"]),
+        ("가나다기관 보안관제 VAT 빼고 예산 얼마야?", ["security"]),
+        ("가나다기관 사업 부가세 빼고 예산 알려줘", ["records", "security"]),
+        ("가나다기관 보안관제 사업에서 마감일 말고 계약 방식을 알려줘", ["security"]),
+        ("가나다기관 문서관리 사업에서 현장 점검 빼고 제출할 문서는?", ["records"]),
+        ("가나다기관 보안관제 사업은 빼고 문서관리 예산 알려줘", ["records"]),
+    ],
+)
+def test_field_exclusion_keeps_the_requested_project(scoped_projects, question, expected):
+    assert find_project_ids(question, scoped_projects) == expected

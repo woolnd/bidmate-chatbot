@@ -148,10 +148,20 @@ PROJECT_SEPARATOR = re.compile(
     r"|,\s*|[/·&+]\s*(?=[가-힣a-z])"
 )
 
+PROJECT_EXCLUSION = re.compile(r"말고|제외하고|빼고")
+FIELD_EXCLUSION = re.compile(
+    r"(?<![가-힣a-z0-9])(?:부가세|부가가치세|vat|세금|예산|마감일|사업비|제출기한)"
+    r"(?:은|는|이|가|을|를)?\s*(?:말고|제외하고|빼고)(?![가-힣a-z0-9])"
+)
 PROJECT_YEAR = re.compile(
     r"(?<![가-힣a-z0-9])(20\d{2})(?:\s*년(?:도)?)?(?=(?:의|은|는|에)?(?![가-힣a-z0-9]))"
 )
 PROJECT_ROUND = re.compile(r"(?<![a-z0-9])(\d{1,2})\s*차(?=(?:의|은|는|에)?(?![가-힣a-z0-9]))")
+
+
+TITLE_END = re.compile(
+    rf"(?:사업|용역|비|예산|마감일|기간)?(?:{'|'.join(PARTICLES)}|에|인)?(?![가-힣a-z0-9])"
+)
 
 
 def _normalize(text: str) -> str:
@@ -388,16 +398,24 @@ def _is_agency_wide_query(project_query_tokens: set[str]) -> bool:
 
 
 def _exclude_conflicting_editions(question: str, projects: list[ProjectInfo]) -> list[ProjectInfo]:
-    """질문의 연도·차수와 다른 값이 제목에 명시된 문서를 뺀다."""
+    """제목의 연도·차수를 비교하고 같은 사업의 버전 없는 문서도 구분한다."""
     for pattern in (PROJECT_YEAR, PROJECT_ROUND):
         requested = set(pattern.findall(question))
         if len(requested) != 1:
             continue
+        titles = []
+        for project in projects:
+            normalized = _normalize(project.project_name)
+            family = (
+                project.agency_name,
+                tuple(re.findall(r"[가-힣a-z0-9]+", pattern.sub(" ", normalized))),
+            )
+            titles.append((project, family, set(pattern.findall(normalized))))
+        versioned_families = {family for _, family, editions in titles if editions}
         projects = [
             project
-            for project in projects
-            if not (editions := set(pattern.findall(_normalize(project.project_name))))
-            or not editions.isdisjoint(requested)
+            for project, family, editions in titles
+            if editions & requested or (not editions and family not in versioned_families)
         ]
     return projects
 
@@ -421,6 +439,21 @@ def _fill_shared_project_name(parts: list[str], agency_tokens: set[str]) -> None
                 break
 
 
+def _split_project_exclusion(question: str) -> tuple[str, str] | None:
+    """사업을 제외하는 표현만 분리한다."""
+    for operator in PROJECT_EXCLUSION.finditer(question):
+        before = question[: operator.start()]
+        content = CONTENT_BOUNDARY.search(before)
+        if (
+            content
+            and content.group().strip() not in {"은", "는"}
+            and before[content.end() :].strip()
+        ):
+            continue
+        return before, question[operator.end() :]
+    return None
+
+
 def find_project_ids(
     question: str,
     projects: list[ProjectInfo],
@@ -441,10 +474,10 @@ def _find_project_ids(
     inherited_agencies: list[str] | None = None,
 ) -> list[str]:
     """문서 ID를 고른다. 추가 사업을 찾을 때는 기관 전체를 고르지 않는다."""
-    question = _normalize(question)
+    question = FIELD_EXCLUSION.sub(" ", _normalize(question))
     inherited_agencies = inherited_agencies or []
-    exclusion = re.split(r"말고|제외하고|빼고", question, maxsplit=1)
-    if len(exclusion) == 2:
+    exclusion = _split_project_exclusion(question)
+    if exclusion:
         before_agencies = _get_agency_matches(exclusion[0], projects) or inherited_agencies
         after_agencies = _get_agency_matches(exclusion[1], projects)
         if before_agencies and not after_agencies:
@@ -461,6 +494,13 @@ def _find_project_ids(
         if _is_agency_wide_query(_tokenize(exclusion[1])) and before_agencies:
             return list(dict.fromkeys(p.project_id for p in projects if p.project_id.strip()))
         question = exclusion[1].strip()
+        if PROJECT_EXCLUSION.search(question):
+            return _find_project_ids(
+                question,
+                projects,
+                allow_agency_pool=allow_agency_pool,
+                inherited_agencies=inherited_agencies,
+            )
     projects = [project for project in projects if project.project_id.strip()]
 
     if not question.strip() or not projects:
@@ -508,10 +548,13 @@ def _find_project_ids(
         search_projects = projects
         project_query_tokens = question_tokens
 
-    # 전체 사업명이 공백 차이만 있는 경우에 한해 원문 근거를 보존한다.
-    compact_question = re.sub(r"\s+", "", _normalize(question))
+    character_positions = [index for index, char in enumerate(question) if not char.isspace()]
+    compact_question = "".join(question[index] for index in character_positions)
     exact_titles = []
-    title_positions = []
+    title_positions: list[tuple[int, int]] = []
+    exact_spans: dict[str, list[tuple[int, int]]] = {}
+    embedded_titles: set[str] = set()
+    agency_keys = {_compact_agency_name(agency) for agency in matched_agencies}
     for project in sorted(
         search_projects,
         key=lambda value: len(re.sub(r"\s+", "", _normalize(value.project_name))),
@@ -520,18 +563,32 @@ def _find_project_ids(
         title = re.sub(r"\s+", "", _normalize(project.project_name))
         if len(title) < 4:
             continue
-        positions = [(m.start(), m.end()) for m in re.finditer(re.escape(title), compact_question)]
-        independent = [
-            (start, end)
-            for start, end in positions
-            if not any(
+        for match in re.finditer(re.escape(title), compact_question):
+            start, end = match.span()
+            if any(
                 left <= start and end <= right and end - start < right - left
                 for left, right in title_positions
+            ):
+                continue
+            raw_start = character_positions[start]
+            raw_end = character_positions[end - 1] + 1
+            starts_name = (
+                raw_start == 0
+                or not re.fullmatch(r"[가-힣a-z0-9]", question[raw_start - 1])
+                or compact_question[:start] in agency_keys
             )
-        ]
-        if independent:
+            if not starts_name or not TITLE_END.match(question, raw_end):
+                embedded_titles.add(project.project_id)
+                continue
+            title_positions.append((start, end))
+            exact_spans.setdefault(project.project_id, []).append((raw_start, raw_end))
             exact_titles.append(project)
-            title_positions.extend(independent)
+    if embedded_titles:
+        search_projects = [
+            project
+            for project in search_projects
+            if project.project_id not in embedded_titles or project.project_id in exact_spans
+        ]
     detail = None
     for marker in CONTENT_BOUNDARY.finditer(question):
         offset = len(re.sub(r"\s+", "", question[: marker.start()]))
@@ -624,11 +681,11 @@ def _find_project_ids(
         return []
 
     if exact_titles:
-        remainder = _normalize(question)
+        remaining_characters = list(question)
         for project in exact_titles:
-            title = re.sub(r"\s+", "", _normalize(project.project_name))
-            pattern = r"\s*".join(re.escape(char) for char in title)
-            remainder = re.sub(pattern, " ", remainder)
+            for start, end in exact_spans[project.project_id]:
+                remaining_characters[start:end] = [" "] * (end - start)
+        remainder = "".join(remaining_characters)
         remaining_tokens = _tokenize(remainder)
         if matched_agencies:
             remaining_tokens -= agency_tokens
@@ -681,10 +738,15 @@ def _find_project_ids(
     multiple_terms_covered = (
         len(project_query_tokens) >= 2 and set(match_counts) == project_query_tokens
     )
+    full_title_terms_matched = len(project_query_tokens) > 1 and any(
+        matches == project_query_tokens for matches in matches_by_project
+    )
     candidates = []
 
     for project, project_matches in zip(search_projects, matches_by_project, strict=True):
         if not project_query_tokens or not project_matches:
+            continue
+        if full_title_terms_matched and project_matches != project_query_tokens:
             continue
         if project_query_tokens - ACTION_WORDS and not project_matches - ACTION_WORDS:
             continue
