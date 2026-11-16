@@ -19,6 +19,7 @@ from bidmate.retrieval.vector_store import (
     make_project_filter,
     save_chunks,
     search_chunks,
+    split_k,
 )
 from bidmate.schemas import CHUNK_METADATA_KEYS
 from tests.fake_chunks import ACADEMIC, ELEARNING, HOMEPAGE, make_fake_chunks
@@ -291,3 +292,68 @@ def test_search_chunks_rejects_empty_question(tmp_path: Path) -> None:
     """질문이 비어 있으면 오류를 낸다."""
     with pytest.raises(ValueError, match="질문"):
         search_chunks("   ", [], 5, make_test_store(tmp_path))
+
+
+# ---------- 여러 문서 나눠 찾기 ----------
+
+
+def test_split_k_gives_remainder_to_front() -> None:
+    """k를 문서 수로 나누고 나머지는 앞 문서부터 하나씩 더 준다. 합은 항상 k다."""
+    assert split_k(5, 1) == [5]
+    assert split_k(5, 2) == [3, 2]
+    assert split_k(5, 3) == [2, 2, 1]
+    assert split_k(2, 3) == [1, 1, 0]
+
+
+def test_search_chunks_several_projects_includes_every_project(tmp_path: Path) -> None:
+    """라마대학교 조각과 똑같은 질문이라도, 문서 2개를 주면 두 문서 조각이 모두 나온다.
+
+    한꺼번에 찾으면 라마대학교 조각 3개가 1~3등을 다 차지한다 (k=3).
+    나눠 찾으면 라마대학교 2개 + 바사재단 1개다.
+    """
+    academic_chunk = make_fake_chunks()[5]
+    vector_store = make_saved_store(tmp_path)
+
+    results = search_chunks(
+        academic_chunk.page_content, [ACADEMIC[0], HOMEPAGE[0]], 3, vector_store
+    )
+
+    project_ids = [document.metadata["project_id"] for document, _ in results]
+    assert len(results) == 3
+    assert project_ids.count(ACADEMIC[0]) == 2
+    assert project_ids.count(HOMEPAGE[0]) == 1
+    assert results[0][0].metadata["chunk_id"] == academic_chunk.metadata["chunk_id"]
+    scores = [score for _, score in results]
+    assert scores == sorted(scores)
+
+
+def test_search_chunks_several_projects_embeds_question_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """문서가 여러 개여도 질문 임베딩은 한 번만 만든다 (OpenAI 호출 1번)."""
+    vector_store = make_saved_store(tmp_path)
+    embed_calls: list[str] = []
+    original_embed_query = DeterministicFakeEmbedding.embed_query
+
+    def count_embed_query(self: DeterministicFakeEmbedding, text: str) -> list[float]:
+        embed_calls.append(text)
+        return original_embed_query(self, text)
+
+    monkeypatch.setattr(DeterministicFakeEmbedding, "embed_query", count_embed_query)
+
+    search_chunks("예산은?", [ELEARNING[0], ACADEMIC[0], HOMEPAGE[0]], 5, vector_store)
+
+    assert embed_calls == ["예산은?"]
+
+
+def test_search_chunks_more_projects_than_k(tmp_path: Path) -> None:
+    """문서 수가 k보다 많으면 k개를 넘기지 않는다 (뒤쪽 문서는 빠진다)."""
+    vector_store = make_saved_store(tmp_path)
+
+    results = search_chunks("예산은?", [ELEARNING[0], ACADEMIC[0], HOMEPAGE[0]], 2, vector_store)
+
+    assert len(results) == 2
+    assert {document.metadata["project_id"] for document, _ in results} == {
+        ELEARNING[0],
+        ACADEMIC[0],
+    }

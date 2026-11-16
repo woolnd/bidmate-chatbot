@@ -9,6 +9,7 @@
 찾기 (질문마다):
     project_id 목록이 있으면 metadata로 걸러서 고른 문서 안에서만 찾는다.
     빈 목록이면 전체에서 찾는다.
+    문서가 2개 이상이면 문서마다 나눠서 찾고 합친다 (한 문서가 k자리를 다 차지하지 않게).
     k(찾아올 조각 수)는 config.py에서 가져온다. 2주차에 3/5/10을 점수로 비교한다.
 
 받는 것: (저장) Document 목록 / (찾기) 다듬은 질문, project_id 목록
@@ -187,7 +188,11 @@ def search_chunks(
     project_filter = make_project_filter(project_ids)
 
     # 4. 질문을 임베딩해서 가장 가까운 조각 k개 찾기 (거리가 작은 순서로 온다)
-    results = vector_store.similarity_search_with_score(question, k=k, filter=project_filter)
+    #    문서가 0~1개면 한 번에 찾고, 2개 이상이면 문서마다 나눠 찾아서 합친다
+    if len(project_ids) <= 1:
+        results = vector_store.similarity_search_with_score(question, k=k, filter=project_filter)
+    else:
+        results = search_each_project(question, project_ids, k, vector_store)
 
     # 5. 0개면 이유를 경고로 남긴다. 4단계는 0개면 "찾은 문서에 없습니다"라고만 답해서
     #    여기서 이유를 남기지 않으면 저장 문제인지, project_id 문제인지 알 수 없다
@@ -195,6 +200,47 @@ def search_chunks(
         warn_empty_result(vector_store, project_ids)
 
     return results
+
+
+def split_k(k: int, project_count: int) -> list[int]:
+    """찾아올 조각 수 k를 문서 수만큼 나눈다. 나머지는 앞 문서부터 하나씩 더 준다.
+
+    받는 것: k (전체 조각 수), project_count (문서 수, 1 이상)
+    넘기는 것: 문서마다 찾아올 조각 수 목록. 합은 항상 k다
+        예: k=5, 문서 2개 → [3, 2] / k=5, 문서 3개 → [2, 2, 1] / k=2, 문서 3개 → [1, 1, 0]
+    """
+    share, remainder = divmod(k, project_count)  # 5 ÷ 2 = 몫 2, 나머지 1
+    return [share + 1 if index < remainder else share for index in range(project_count)]
+
+
+def search_each_project(
+    question: str,
+    project_ids: list[str],
+    k: int,
+    vector_store: Chroma,
+) -> list[tuple[Document, float]]:
+    """문서마다 나눠서 찾고 합친다. 여러 문서 질문에서 한 문서가 k자리를 다 차지하지 않게 한다.
+
+    받는 것: 질문, project_id 목록 (2개 이상), 전체 조각 수 k, 저장소
+    넘기는 것: [(Document, 점수), ...] 최대 k개. 합친 뒤 점수가 작은 순서로 다시 줄 세운다
+               문서 수가 k보다 많으면 뒤쪽 문서는 0개를 받아 빠진다 (k개를 넘기지 않으려고)
+
+    질문 임베딩은 한 번만 만들어서 모든 문서에 다시 쓴다 (문서가 많아도 OpenAI 호출은 1번).
+    """
+    question_vector = vector_store.embeddings.embed_query(question)
+
+    results: list[tuple[Document, float]] = []
+    for project_id, project_k in zip(project_ids, split_k(k, len(project_ids)), strict=True):
+        if project_k == 0:
+            continue
+        results.extend(
+            vector_store.similarity_search_by_vector_with_relevance_scores(
+                question_vector, k=project_k, filter={"project_id": project_id}
+            )
+        )
+
+    # 문서마다 따로 찾아서 순서가 섞여 있으니, 점수(거리)가 작은 순서로 다시 줄 세운다
+    return sorted(results, key=lambda result: result[1])
 
 
 def warn_empty_result(vector_store: Chroma, project_ids: list[str]) -> None:
