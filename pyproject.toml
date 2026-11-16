@@ -23,6 +23,7 @@ dependencies = [
     "pymupdf>=2.1",
     "syhwp>=0.0.8",
     "langchain-text-splitters>=1.1.3",
+    "langchain-ollama>=1.1.0",
 ]
 
 [dependency-groups]

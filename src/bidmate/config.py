@@ -53,6 +53,12 @@ REWRITE_MAX_TOKENS = 300  # 다듬은 질문 한 줄이면 충분. 생각에 쓴
 ANSWER_REASONING_EFFORT = "low"  # 조각 여러 개에서 맞는 내용을 골라야 해서 minimal보다 한 단계 위
 ANSWER_MAX_TOKENS = 800  # 생각에 쓴 토큰도 포함된다. 답이 잘리면 늘린다
 
+# 4단계 답변 모델 고르기 (시나리오 B: openai / 시나리오 A: ollama). .env에서 바꾼다
+# 1단계 질문 다듬기, 3단계 임베딩, 채점 AI는 이 설정과 상관없이 항상 OpenAI
+ANSWER_PROVIDER = os.getenv("ANSWER_PROVIDER", "openai")
+OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "qwen3.5:9b")  # 10초 목표에 맞게 작은 판부터
+OLLAMA_TEMPERATURE = 0  # 같은 질문에 답이 흔들리지 않게 고정
+
 # 기능 켜기/끄기 (11/23~24 기능 끄기 실험용)
 USE_QUESTION_REWRITE = True  # 1단계 질문 다듬기. 끄면 질문을 그대로 넘긴다
 

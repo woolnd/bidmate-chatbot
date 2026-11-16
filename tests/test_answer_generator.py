@@ -80,3 +80,23 @@ def test_passes_only_recent_turns():
     assert "이전질문0" not in text
     assert "이전질문1" not in text
     assert all(f"이전질문{i}" in text for i in (2, 3, 4, 5, 6))
+
+
+def test_answer_provider_picks_model(monkeypatch):
+    # 설정에 따라 4단계 모델이 Ollama(시나리오 A) / OpenAI(시나리오 B)로 바뀐다
+    # 모델을 만들기만 하고 부르지 않는다
+    from langchain_ollama import ChatOllama
+    from langchain_openai import ChatOpenAI
+
+    from bidmate.generation import answer_generator
+
+    # CI에는 키가 없어서 ChatOpenAI를 만들 때 쓸 가짜 키
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    monkeypatch.setattr(answer_generator, "ANSWER_PROVIDER", "ollama")
+    ollama_model = answer_generator.make_answer_model().first.bound
+    assert isinstance(ollama_model, ChatOllama)
+    assert ollama_model.reasoning is False
+
+    monkeypatch.setattr(answer_generator, "ANSWER_PROVIDER", "openai")
+    assert isinstance(answer_generator.make_answer_model().first.bound, ChatOpenAI)
