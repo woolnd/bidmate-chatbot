@@ -15,6 +15,8 @@ import unicodedata
 from collections import Counter
 from typing import TYPE_CHECKING
 
+from rapidfuzz.distance import Levenshtein
+
 if TYPE_CHECKING:
     from bidmate.schemas import ProjectInfo
 
@@ -455,6 +457,19 @@ def _split_project_exclusion(question: str) -> tuple[str, str] | None:
     return None
 
 
+def _correct_typo(token: str, search_tokens: list[set[str]]) -> set[str]:
+    """편집거리 1 이내(삽입·삭제·치환) 오타를 교정할 후보 단어를 찾는다.
+
+    후보가 정확히 하나로 좁혀질 때만 호출한 쪽에서 교정에 사용한다.
+    """
+    return {
+        word
+        for terms in search_tokens
+        for word in terms
+        if abs(len(word) - len(token)) <= 1 and Levenshtein.distance(token, word) <= 1
+    }
+
+
 def find_project_ids(
     question: str,
     projects: list[ProjectInfo],
@@ -720,14 +735,7 @@ def _find_project_ids(
                 continue
             if any(_match_project_tokens({token}, terms) for terms in search_tokens):
                 continue
-            corrections = {
-                word
-                for terms in search_tokens
-                for word in terms
-                if len(word) >= len(token)
-                and word[0] == token[0]
-                and sum(a != b for a, b in zip(token, word[: len(token)])) == 1
-            }
+            corrections = _correct_typo(token, search_tokens)
             if len(corrections) == 1:
                 project_query_tokens.remove(token)
                 project_query_tokens.update(corrections)

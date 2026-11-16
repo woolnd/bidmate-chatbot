@@ -19,6 +19,8 @@ dependencies = [
     "python-dotenv>=1.0",
     # 화면
     "streamlit>=1.40",
+    "rapidfuzz>=3.14.6",
+    "pyahocorasick>=2.3.1",
 ]
 
 [dependency-groups]
