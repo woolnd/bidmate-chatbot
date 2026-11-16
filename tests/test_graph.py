@@ -8,7 +8,7 @@ from langchain_core.documents import Document
 
 from bidmate.pipeline import graph
 from bidmate.pipeline.graph import run_chatbot
-from bidmate.schemas import AnswerResult
+from bidmate.schemas import AnswerResult, ProjectInfo
 
 FAKE_CHUNK = (Document(page_content="[가나다공단 / 이러닝] 예산 1억", metadata={}), 0.1)
 FAKE_ANSWER = AnswerResult(
@@ -70,3 +70,53 @@ def test_empty_search_gives_no_evidence_answer(monkeypatch):
     assert state["rewritten_question"] == "예산은?"
     assert state["answer_result"].answer == "찾은 문서에 없습니다."
     assert state["answer_result"].has_evidence is False
+
+
+def test_catalog_miss_skips_search_but_ambiguous_question_keeps_fallback(monkeypatch):
+    projects = [ProjectInfo("unrelated", "가나다기관", "문서관리 운영", None, None)]
+    monkeypatch.setattr(graph, "get_projects", lambda: projects)
+    searches = []
+
+    def fake_search(question, project_ids, k):
+        searches.append((question, project_ids))
+        return []
+
+    monkeypatch.setattr(graph, "search_chunks", fake_search)
+    for question in (
+        "가나다기관 위성발사 사업 예산",
+        "발주처가 가상재단인 문서관리 운영 예산",
+    ):
+        state = run_chatbot(question, [])
+        assert state["project_ids"] == []
+        assert state["chunks"] == []
+        assert not state["answer_result"].has_evidence
+    assert searches == []
+
+    for question in (
+        "참여 자격 알려줘",
+        "전기공사 참여 자격은?",
+        "가나다기관의 어떤 사업이 있나요?",
+    ):
+        state = run_chatbot(question, [])
+        assert not state["catalog_miss"]
+    assert searches[0] == ("참여 자격 알려줘", [])
+
+
+def test_comparison_passes_both_exact_document_ids_to_search(monkeypatch):
+    projects = [
+        ProjectInfo("  포털 (1).hwp", "가나다기관", "문서관리시스템 구축", None, None),
+        ProjectInfo("정산 [2].pdf", "라마바기관", "보조금 정산 플랫폼 개발", None, None),
+        ProjectInfo("unrelated", "가나다기관", "보안관제 운영", None, None),
+    ]
+    monkeypatch.setattr(graph, "get_projects", lambda: projects)
+    calls = []
+
+    def fake_search(question, project_ids, k):
+        calls.append(project_ids)
+        return []
+
+    monkeypatch.setattr(graph, "search_chunks", fake_search)
+    state = run_chatbot("가나다기관 문서관리와 라마바기관 보조금 정산 각각 예산", [])
+
+    assert calls == [["  포털 (1).hwp", "정산 [2].pdf"]]
+    assert state["project_ids"] == calls[0]

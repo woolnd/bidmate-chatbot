@@ -1,7 +1,6 @@
 """Search-B: 질문에 적합한 사업 문서를 선별한다.
 
-기관명과 사업명을 분리해 비교하고,
-전체 사업 목록에서 계산한 단어 중요도를 활용해 후보를 평가한다.
+기관과 사업의 조건을 적용하고, 사업명에서 드물게 나오는 단어로 후보를 좁힌다.
 
 CSV 로딩이나 문서 검색은 담당하지 않으며,
 선택한 문서의 원본 project_id만 반환한다.
@@ -9,7 +8,6 @@ CSV 로딩이나 문서 검색은 담당하지 않으며,
 
 from __future__ import annotations
 
-import math
 import re
 import unicodedata
 from collections import Counter
@@ -17,6 +15,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from bidmate.schemas import ProjectInfo
+
+
+COMMON_TITLE_TERM_MIN_DOCUMENTS = 10
 
 
 # 질문의 의도나 공고 형식에 가까워 사업 식별에 도움이 적은 단어
@@ -66,6 +67,8 @@ STOP_WORDS.update(
         "알려줘",
         "각각",
         "비교",
+        "비교해줘",
+        "비교해주세요",
         "언제",
         "어디",
         "관련",
@@ -125,6 +128,8 @@ PARTICLES = (
     "이랑",
     "랑",
     "하고",
+    "만을",
+    "만",
     "은",
     "는",
     "이",
@@ -148,10 +153,29 @@ PROJECT_SEPARATOR = re.compile(
     r"|,\s*|[/·&+]\s*(?=[가-힣a-z])"
 )
 
-PROJECT_EXCLUSION = re.compile(r"말고|제외하고|빼고")
+EXCLUSION_VERBS = r"말고|제외하고|제외한|제외하여|빼고"
+PROJECT_EXCLUSION = re.compile(EXCLUSION_VERBS)
+ISSUER_REFERENCE = re.compile(
+    r"(?<![가-힣a-z0-9])(?:발주처|발주\s*기관)\s*(?:(?P<field>:)|[가이는은])\s*"
+    r"(?!(?:어느|어떤|어디|누구|무슨|무엇|누가))"
+    r"(?P<issuer>(?:(?:사단|재단)법인\s+)?[가-힣a-z0-9(][^?,;:]*?)"
+    r"(?(field)(?:[,;]|$)|인(?=\s|$))"
+)
+ISSUER_PREFIX = re.compile(
+    r"^(?:(?:주식회사|유한회사)\s+)?"
+    r"(?P<issuer>[가-힣a-z0-9]{2,}(?:공단|재단|대학교|전자|연구원))\s+"
+)
+PROJECT_REFERENCE = re.compile(
+    r"(?<![가-힣a-z0-9])(?:사업|용역)(?:에서|에|의|은|는)?(?=\s|[?.,]|$)"
+)
+COMPARISON_FIELD = re.compile(
+    r"(?:예산|사업비|마감일|기간|요구사항|조건|일정|제출기한)(?:을|를)\s+"
+    r"(?=[^?!]+?(?:과|와|랑|하고)\s+비교)"
+)
+OPEN_SCOPE_WORDS = {"어떤", "어느", "모든", "전체", "추천", "찾아줘", "뭐가", "무슨"}
 FIELD_EXCLUSION = re.compile(
     r"(?<![가-힣a-z0-9])(?:부가세|부가가치세|vat|세금|예산|마감일|사업비|제출기한)"
-    r"(?:은|는|이|가|을|를)?\s*(?:말고|제외하고|빼고)(?![가-힣a-z0-9])"
+    rf"(?:은|는|이|가|을|를)?\s*(?:{EXCLUSION_VERBS})(?![가-힣a-z0-9])"
 )
 PROJECT_YEAR = re.compile(
     r"(?<![가-힣a-z0-9])(20\d{2})(?:\s*년(?:도)?)?(?=(?:의|은|는|에)?(?![가-힣a-z0-9]))"
@@ -210,39 +234,6 @@ def _tokenize(text: str) -> set[str]:
     return tokens
 
 
-def _calculate_idf(
-    projects: list[ProjectInfo],
-    tokens_by_title: dict[str, set[str]],
-) -> dict[str, float]:
-    """미리 나눈 사업명 단어에서 역문서빈도(IDF)를 계산한다."""
-    document_frequency: Counter[str] = Counter()
-    for project in projects:
-        document_frequency.update(tokens_by_title[project.project_name])
-    return {
-        token: math.log((len(projects) + 1) / (frequency + 1)) + 1
-        for token, frequency in document_frequency.items()
-    }
-
-
-def _weighted_coverage(
-    query_tokens: set[str],
-    matched_tokens: set[str],
-    idf: dict[str, float],
-) -> float:
-    """질문 단어 중 일치한 단어의 중요도 가중 비율을 계산한다."""
-
-    if not query_tokens:
-        return 0.0
-
-    total_weight = sum(idf.get(token, 1.0) for token in query_tokens)
-    matched_weight = sum(idf.get(token, 1.0) for token in matched_tokens)
-
-    if total_weight == 0:
-        return 0.0
-
-    return matched_weight / total_weight
-
-
 def _match_project_tokens(
     query_tokens: set[str],
     project_tokens: set[str],
@@ -292,6 +283,41 @@ def _compact_agency_name(text: str) -> str:
     return re.sub(r"[^가-힣a-z0-9]", "", normalized)
 
 
+def _expand_issuer_keys(issuer_keys: set[str]) -> set[str]:
+    keys = set(issuer_keys)
+    for alias, canonical in ALIASES.items():
+        if _compact_agency_name(alias) in issuer_keys:
+            keys.add(_compact_agency_name(canonical))
+    for alias, names in AGENCY_ALIASES.items():
+        if _compact_agency_name(alias) in issuer_keys:
+            keys.update(_compact_agency_name(name) for name in names)
+    return keys
+
+
+def _issuer_key_matches(agency: str, issuer_keys: set[str]) -> bool:
+    key = _compact_agency_name(agency)
+    return key in issuer_keys or (key.startswith("한국") and key[2:] in issuer_keys)
+
+
+def _has_unlisted_issuer_prefix(question: str, projects: list[ProjectInfo]) -> bool:
+    question = question.lstrip()
+    prefix = ISSUER_PREFIX.match(question)
+    if prefix is None or PROJECT_REFERENCE.search(question, prefix.end()) is None:
+        return False
+    issuer = prefix["issuer"]
+    keys = _expand_issuer_keys({_compact_agency_name(issuer)})
+    question = " ".join(question.split())
+    for project in projects:
+        agency = " ".join(_normalize(project.agency_name).split())
+        if (
+            _issuer_key_matches(project.agency_name, keys)
+            or (agency.startswith(issuer + " ") and question.startswith(agency + " "))
+            or _normalize(project.project_name).startswith(issuer + " ")
+        ):
+            return False
+    return True
+
+
 def _get_agency_matches(
     question: str,
     projects: list[ProjectInfo],
@@ -304,6 +330,14 @@ def _get_agency_matches(
         key=lambda value: len(_compact_agency_name(value)),
         reverse=True,
     )
+
+    issuer_names = {
+        _compact_agency_name(match["issuer"])
+        for match in ISSUER_REFERENCE.finditer(_normalize(question))
+    }
+    if issuer_names:
+        keys = _expand_issuer_keys(issuer_names)
+        return [agency for agency in agencies if _issuer_key_matches(agency, keys)]
 
     matched = []
     occupied: list[tuple[int, int]] = []
@@ -466,6 +500,36 @@ def find_project_ids(
     return _find_project_ids(question, projects)
 
 
+def has_explicit_project_scope(question: str, projects: list[ProjectInfo]) -> bool:
+    """문서 후보가 비었을 때 질문에 목록 조회 범위가 명시됐는지 확인한다."""
+    if not projects:
+        return False
+    question = _normalize(question).strip()
+    if ISSUER_REFERENCE.search(question) or _has_unlisted_issuer_prefix(question, projects):
+        return True
+    reference = PROJECT_REFERENCE.search(question)
+    if reference is None:
+        return False
+    subject = question[: reference.start()]
+    subject_tokens = _tokenize(subject) - ACTION_WORDS
+    if not subject_tokens or subject_tokens & OPEN_SCOPE_WORDS:
+        return False
+    agencies = _get_agency_matches(subject, projects)
+    if not agencies:
+        return False
+    agency_tokens: set[str] = set()
+    agency_keys = {_compact_agency_name(agency) for agency in agencies}
+    for agency in agencies:
+        agency_tokens.update(_tokenize(agency))
+        key = _compact_agency_name(agency)
+        if key.startswith("한국"):
+            agency_tokens.update(_tokenize(key[2:]))
+    for alias, names in AGENCY_ALIASES.items():
+        if agency_keys & {_compact_agency_name(name) for name in names}:
+            agency_tokens.update(_tokenize(alias))
+    return not _is_agency_wide_query(subject_tokens - agency_tokens)
+
+
 def _find_project_ids(
     question: str,
     projects: list[ProjectInfo],
@@ -506,12 +570,16 @@ def _find_project_ids(
     if not question.strip() or not projects:
         return []
 
-    question_tokens = _tokenize(question)
+    issuer_spans = [match.span() for match in ISSUER_REFERENCE.finditer(question)]
+    issuer_explicit = bool(issuer_spans)
+    question_tokens = _tokenize(ISSUER_REFERENCE.sub(r"\g<issuer> ", question))
 
     if not question_tokens:
         return []
 
-    matched_agencies = _get_agency_matches(question, projects) or inherited_agencies
+    matched_agencies = _get_agency_matches(question, projects)
+    if not matched_agencies and not issuer_explicit:
+        matched_agencies = inherited_agencies
     agency_tokens: set[str] = set()
 
     if matched_agencies:
@@ -596,8 +664,26 @@ def _find_project_ids(
             detail = marker
             break
 
+    field_separators = list(COMPARISON_FIELD.finditer(question))
+    title_words: set[str] | None = None
     boundaries = []
-    for match in PROJECT_SEPARATOR.finditer(question):
+    for match in sorted(
+        [*PROJECT_SEPARATOR.finditer(question), *field_separators],
+        key=lambda candidate: candidate.start(),
+    ):
+        if any(start <= match.start() < end for start, end in issuer_spans):
+            continue
+        if match.group() in {"과", "와", "랑", "이랑", "하고"}:
+            word = re.search(r"[가-힣a-z0-9]+$", question[: match.end()])
+            if word:
+                if title_words is None:
+                    title_words = {
+                        token
+                        for project in search_projects
+                        for token in re.findall(r"[가-힣a-z0-9]+", _normalize(project.project_name))
+                    }
+                if word.group() in title_words:
+                    continue
         offset = len(re.sub(r"\s+", "", question[: match.start()]))
         if not any(start < offset < end for start, end in title_positions):
             boundaries.append(match)
@@ -605,7 +691,7 @@ def _find_project_ids(
     separators = []
     compares_projects = bool(re.search(r"각각|비교", question))
     for index, match in enumerate(boundaries):
-        if detail and match.start() > detail.start():
+        if detail and match.start() > detail.start() and match not in field_separators:
             limit = boundaries[index + 1].start() if index + 1 < len(boundaries) else len(question)
             next_subject = CONTENT_BOUNDARY.search(question, match.end(), limit)
             if next_subject is None:
@@ -634,24 +720,51 @@ def _find_project_ids(
         # 먼저 나온 기관은 기관명이 생략된 다음 사업에만 이어 쓴다.
         part_agencies = inherited_agencies
         coordinated_ids = []
+        missing_qualified_part = False
+        unlisted_issuer = False
         for part in parts:
             explicit_agencies = _get_agency_matches(part, projects)
+            issuer_named = bool(ISSUER_REFERENCE.search(part))
+            unlisted_prefix = _has_unlisted_issuer_prefix(part, projects)
+            if issuer_named or unlisted_prefix or explicit_agencies:
+                unlisted_issuer = unlisted_prefix or (issuer_named and not explicit_agencies)
+            if unlisted_issuer:
+                missing_qualified_part = True
+                continue
             part_agencies = explicit_agencies or part_agencies
+            qualified_part = bool(
+                issuer_named or PROJECT_YEAR.search(part) or PROJECT_ROUND.search(part)
+            )
             part_ids = _find_project_ids(
                 part,
                 projects,
                 allow_agency_pool=False,
                 inherited_agencies=part_agencies,
             )
-            if not part_ids and not explicit_agencies and part_agencies and coordinated_ids:
+            if not part_ids and qualified_part:
+                missing_qualified_part = True
+            if (
+                not part_ids
+                and not explicit_agencies
+                and not qualified_part
+                and part_agencies
+                and coordinated_ids
+            ):
                 part_ids = _find_project_ids(part, projects, allow_agency_pool=False)
             if len(part_ids) > 1:
                 break
             coordinated_ids.extend(part_ids)
         else:
             unique_ids = list(dict.fromkeys(coordinated_ids))
-            if len(unique_ids) >= 2 or (unique_ids and "각각" in question):
+            if len(unique_ids) >= 2 or (
+                unique_ids and (compares_projects or missing_qualified_part)
+            ):
                 return unique_ids
+
+    if (issuer_explicit and not matched_agencies) or _has_unlisted_issuer_prefix(
+        question, projects
+    ):
+        return []
 
     if detail:
         mention = question[: detail.start()]
@@ -711,7 +824,6 @@ def _find_project_ids(
 
     tokens_by_title = {title: _tokenize(title) for title in {p.project_name for p in projects}}
     search_tokens = [tokens_by_title[p.project_name] for p in search_projects]
-    idf = _calculate_idf(projects, tokens_by_title)
 
     if matched_agencies:
         for token in list(project_query_tokens):
@@ -735,61 +847,44 @@ def _find_project_ids(
         _match_project_tokens(project_query_tokens, terms) for terms in search_tokens
     ]
     match_counts = Counter(token for matches in matches_by_project for token in matches)
-    multiple_terms_covered = (
-        len(project_query_tokens) >= 2 and set(match_counts) == project_query_tokens
+    document_frequency = Counter(
+        token for project in projects for token in tokens_by_title[project.project_name]
     )
-    full_title_terms_matched = len(project_query_tokens) > 1 and any(
-        matches == project_query_tokens for matches in matches_by_project
-    )
-    candidates = []
+    name_query_terms = project_query_tokens - ACTION_WORDS
+    required_terms = {
+        token
+        for token in name_query_terms
+        if 0 < match_counts[token]
+        and max(match_counts[token], document_frequency[token]) < COMMON_TITLE_TERM_MIN_DOCUMENTS
+    }
+    if not required_terms:
+        return []
 
-    for project, project_matches in zip(search_projects, matches_by_project, strict=True):
-        if not project_query_tokens or not project_matches:
-            continue
-        if full_title_terms_matched and project_matches != project_query_tokens:
-            continue
-        if project_query_tokens - ACTION_WORDS and not project_matches - ACTION_WORDS:
-            continue
-
-        project_coverage = _weighted_coverage(
-            project_query_tokens,
-            project_matches,
-            idf,
+    candidates = [
+        (project.project_id, len(matches & required_terms), len(matches & ACTION_WORDS))
+        for project, matches, title_terms in zip(
+            search_projects, matches_by_project, search_tokens, strict=True
         )
-
-        distinctive_single_match = any(
-            (len(token) >= 4 or bool(matched_agencies) or bool(re.fullmatch(r"[a-z]{2,}", token)))
-            and match_counts[token] <= 2
-            for token in project_matches
+        if matches & required_terms
+        and (
+            len(matches & required_terms) > 1
+            or any(
+                len(token) >= 4
+                or re.fullmatch(r"[a-z]{2,}", token)
+                or matched_agencies
+                and (token in title_terms or len(name_query_terms) == 1)
+                for token in matches & required_terms
+            )
         )
-        enough_project_evidence = len(project_matches) >= 2 or distinctive_single_match
-        # 여러 사업명을 함께 물으면 문서마다 한 단어가 맞을 수 있다.
-        coverage_floor = 0.0 if matched_agencies and multiple_terms_covered else 0.5
-        required_coverage = min(0.5, coverage_floor) if matched_agencies else 0.75
-        if not enough_project_evidence or project_coverage < required_coverage:
-            continue
-
-        project_agency_tokens = _tokenize(project.agency_name)
-        agency_matches = question_tokens & project_agency_tokens
-        agency_bonus = 0.0
-
-        if agency_matches:
-            agency_coverage = len(agency_matches) / max(len(project_agency_tokens), 1)
-            agency_bonus = min(agency_coverage, 1.0) * 0.15
-
-        score = project_coverage * 0.85 + agency_bonus
-        candidates.append((project.project_id, score))
-
+    ]
     if not candidates:
         return []
 
-    candidates.sort(key=lambda item: item[1], reverse=True)
-    best_score = candidates[0][1]
-
+    best = max((name_hits, action_hits) for _, name_hits, action_hits in candidates)
     return list(
         dict.fromkeys(
             project_id
-            for project_id, score in candidates
-            if score >= best_score - 0.10 or (matched_agencies and multiple_terms_covered)
+            for project_id, name_hits, action_hits in candidates
+            if (name_hits, action_hits) == best
         )
     )

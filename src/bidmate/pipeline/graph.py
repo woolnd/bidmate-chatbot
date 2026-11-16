@@ -16,7 +16,7 @@ from bidmate.config import PROJECT_LIST_PATH, TOP_K
 from bidmate.data.metadata import load_project_list
 from bidmate.generation.answer_generator import generate_answer
 from bidmate.generation.question_rewriter import rewrite_question
-from bidmate.retrieval.project_finder import find_project_ids
+from bidmate.retrieval.project_finder import find_project_ids, has_explicit_project_scope
 from bidmate.retrieval.vector_store import search_chunks
 from bidmate.schemas import ChatHistory, ChatState, ProjectInfo
 
@@ -42,13 +42,20 @@ def rewrite_node(state: ChatState) -> ChatState:
 
 
 def find_projects_node(state: ChatState) -> ChatState:
-    """2단계 문서 고르기. 읽는 것: rewritten_question → 채우는 것: project_ids"""
-    project_ids = find_project_ids(state["rewritten_question"], get_projects())
-    return {"project_ids": project_ids}
+    """2단계 문서 고르기. 문서 ID와 명시한 검색 범위가 비었는지 돌려준다."""
+    question = state["rewritten_question"]
+    projects = get_projects()
+    project_ids = find_project_ids(question, projects)
+    return {
+        "project_ids": project_ids,
+        "catalog_miss": not project_ids and has_explicit_project_scope(question, projects),
+    }
 
 
 def search_node(state: ChatState) -> ChatState:
     """3단계 조각 찾기. 읽는 것: rewritten_question, project_ids → 채우는 것: chunks"""
+    if state.get("catalog_miss", False):
+        return {"chunks": []}
     chunks = search_chunks(state["rewritten_question"], state["project_ids"], TOP_K)
     return {"chunks": chunks}
 

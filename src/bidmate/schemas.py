@@ -83,5 +83,6 @@ class ChatState(TypedDict, total=False):
     chat_history: ChatHistory  # 화면이 모아 둔 대화 기록
     rewritten_question: str  # 1단계가 채운다
     project_ids: list[str]  # 2단계가 채운다 (못 고르면 [])
+    catalog_miss: bool
     chunks: list[tuple[Document, float]]  # 3단계가 채운다 (Document, 점수) 목록
     answer_result: AnswerResult  # 4단계가 채운다

@@ -472,3 +472,82 @@ def test_complete_title_requires_legal_word_boundaries(question, expected):
 )
 def test_field_exclusion_keeps_the_requested_project(scoped_projects, question, expected):
     assert find_project_ids(question, scoped_projects) == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("발주처가 가나다기관지원재단인 계정관리시스템 구축 사업 마감일", []),
+        ("발주처가 다른관리공단인 계정관리시스템 구축 사업 마감일", []),
+        ("발주처: 가상재단, 계정관리시스템 구축과 통합검색 각각 예산", []),
+        ("발주처가 가상재단인 계정관리시스템 구축과 통합검색 각각 예산", []),
+        ("가나다기관지원재단 계정관리시스템 구축 사업 마감일", []),
+        ("다른관리공단 계정관리시스템 구축 사업 마감일", []),
+        ("발주처가 라마바기관인 계정관리 사업 마감일", ["other"]),
+        ("가나다기관 정보포털 고도화 2026년과 라마바기관 계정관리시스템 구축 예산", ["other"]),
+        ("가나다기관 계정관리 예산을 라마바기관의 통합검색과 비교해줘", ["account", "search"]),
+        (
+            "발주처가 가상재단인 계정관리와 라마바기관 통합검색 각각 예산",
+            ["search"],
+        ),
+        ("가나다기관 계정관리시스템 구축을 제외한 사업 알려줘", ["portal24", "portal25"]),
+        ("가나다기관 계정관리시스템 구축만 빼고 나머지", ["portal24", "portal25"]),
+        ("가나다기관만 알려줘", ["account", "portal24", "portal25"]),
+    ],
+)
+def test_explicit_issuer_and_comparison_scope(question, expected):
+    projects = [
+        ProjectInfo("account", "가나다기관", "계정관리시스템 구축", None, None),
+        ProjectInfo("portal24", "가나다기관", "2024년 정보포털 고도화", None, None),
+        ProjectInfo("portal25", "가나다기관", "2025년 정보포털 고도화", None, None),
+        ProjectInfo("other", "라마바기관", "계정관리시스템 구축", None, None),
+        ProjectInfo("search", "라마바기관", "통합검색 기능개선", None, None),
+    ]
+    assert find_project_ids(question, projects) == expected
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "발주처가 어디인 문서관리시스템 구축 사업인가요?",
+        "문서관리시스템 구축 사업의 발주처는 어디고, 예산은 얼마인가요?",
+        "문서관리시스템 구축 사업의 발주처가 무엇인지, 제출 기한도 알려줘",
+    ],
+)
+def test_question_about_issuer_does_not_treat_interrogative_as_a_name(scoped_projects, question):
+    assert find_project_ids(question, scoped_projects) == ["records"]
+
+
+def test_issuer_name_can_continue_after_an_organization_suffix():
+    projects = [
+        ProjectInfo("partner", "가나다연구원 기술지원센터", "데이터 통합 검색망 구축", None, None),
+    ]
+    question = "가나다연구원 기술지원센터 데이터 통합 검색망 구축 사업 예산"
+    assert find_project_ids(question, projects) == ["partner"]
+
+
+def test_particle_at_end_of_catalog_word_does_not_split_comparison():
+    projects = [
+        ProjectInfo("evaluation", "가나다기관", "디지털 교육 성과 평가 연구", None, None),
+        ProjectInfo("application", "가나다기관", "디지털 교육 신청 서비스", None, None),
+    ]
+    question = "가나다기관 디지털 교육 성과 평가 & 디지털 교육 신청 각각 예산"
+    assert find_project_ids(question, projects) == ["evaluation", "application"]
+
+
+def test_common_catalog_words_do_not_override_distinctive_title_terms():
+    projects = [
+        ProjectInfo(str(index), "가나다기관", f"통합지원 모듈{index} 운영", None, None)
+        for index in range(10)
+    ]
+    projects.append(ProjectInfo("target", "가나다기관", "통합지원 기록보관 운영", None, None))
+    assert find_project_ids("통합지원 기록보관 예산", projects) == ["target"]
+    assert find_project_ids("통합지원 예산", projects) == []
+
+
+def test_short_partial_match_needs_more_evidence_in_a_longer_query():
+    projects = [
+        ProjectInfo("records", "가나다기관", "기록보관 학술연구 운영", None, None),
+    ]
+    assert find_project_ids("가나다기관 연구 예산", projects) == ["records"]
+    assert find_project_ids("가나다기관 별도과제 연구 예산", projects) == []
