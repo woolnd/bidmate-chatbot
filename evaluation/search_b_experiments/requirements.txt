@@ -1,0 +1,6 @@
+rapidfuzz==3.14.6
+python-mecab-ko==1.3.7
+python-mecab-ko-dic==2.1.1.post2
+pybktree==1.1
+splink==4.0.17
+duckdb==2.0.0
