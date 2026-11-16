@@ -14,7 +14,17 @@ from langchain_core.embeddings import DeterministicFakeEmbedding
 
 from bidmate.retrieval.vector_store import get_vector_store, save_chunks
 from bidmate.schemas import ProjectInfo
-from evaluation.score_search import check_search_hit, load_questions, score, split_names
+from evaluation.score_search import (
+    check_content_hit,
+    check_search_hit,
+    get_keywords,
+    keyword_in_document,
+    load_questions,
+    match_keywords_to_projects,
+    normalize_text,
+    score,
+    split_names,
+)
 from tests.fake_chunks import ACADEMIC, ELEARNING, HOMEPAGE, make_fake_chunks
 
 FAKE_EMBEDDING_SIZE = 16
@@ -35,15 +45,22 @@ def make_saved_store(folder: Path) -> Chroma:
     return vector_store
 
 
-def make_question(question_id: str, question: str, expected_project_names: str) -> dict:
+def make_question(
+    question_id: str,
+    question: str,
+    expected_project_names: str,
+    keywords: str = "",
+    question_type: str = "한 문서",
+) -> dict:
     """평가셋 한 줄과 같은 모양의 가짜 질문."""
     return {
         "question_id": question_id,
-        "question_type": "한 문서",
+        "question_type": question_type,
         "question": question,
         "previous_question": "",
         "expected_answer": "",
         "expected_project_names": expected_project_names,
+        "keywords": keywords,
     }
 
 
@@ -150,3 +167,103 @@ def test_score_rejects_bad_k(tmp_path: Path, bad_k: int) -> None:
 
     with pytest.raises(ValueError):
         score(questions, make_saved_store(tmp_path), make_projects(), k=bad_k)
+
+
+# ---------- 내용 기준 판정 ----------
+
+
+def make_chunk(project_id: str, text: str) -> tuple[Document, float]:
+    """search_chunks 결과 모양의 조각 하나 (내용 판정용)."""
+    return (Document(page_content=text, metadata={"project_id": project_id}), 0.1)
+
+
+def test_normalize_text() -> None:
+    """띄어쓰기와 쉼표를 지워서 표기만 다른 말을 같게 본다."""
+    assert normalize_text("986,945,000 원") == "986945000원"
+    assert normalize_text("작 성 방 법") == "작성방법"
+
+
+def test_get_keywords_reads_keyword_column() -> None:
+    """키워드 칸을 | 로 나누고, 칸이 없거나 비면 빈 목록이다."""
+    assert get_keywords({"keywords": "5개월|180일"}) == ["5개월", "180일"]
+    assert get_keywords({"answer_keywords": "130대"}) == ["130대"]
+    assert get_keywords({"keywords": ""}) == []
+    assert get_keywords({}) == []
+
+
+def test_keyword_in_document_ignores_spaces_and_commas() -> None:
+    """띄어쓰기·쉼표가 달라도 같은 말로 보고, 어느 조각에도 없으면 False."""
+    texts = ["[가나다 / 사업] 예산 986945000원", "[가나다 / 사업] 작 성 방 법"]
+
+    assert keyword_in_document(["986,945,000원"], texts) is True
+    assert keyword_in_document(["작성방법"], texts) is True
+    assert keyword_in_document(["99개"], texts) is False
+
+
+def test_match_keywords_to_projects_pairs_by_order() -> None:
+    """여러 문서 질문은 키워드를 사업 순서대로 짝짓고, 빈 짝은 사업명만 확인(빈 목록)."""
+    assert match_keywords_to_projects({"answer_keywords": "5개월|180일"}, ["A", "B"]) == {
+        "A": ["5개월"],
+        "B": ["180일"],
+    }
+    assert match_keywords_to_projects({"answer_keywords": "33개|"}, ["A", "B"]) == {
+        "A": ["33개"],
+        "B": [],
+    }
+    # 한 문서 질문이면 | 는 "하나라도 있으면"
+    assert match_keywords_to_projects({"answer_keywords": "5개월|180일"}, ["A"]) == {
+        "A": ["5개월", "180일"]
+    }
+
+
+def test_check_content_hit_needs_every_document() -> None:
+    """정답 문서마다 정답 글자가 든 조각이 있어야 맞고, 가장 늦은 등수를 돌려준다."""
+    chunks = [
+        make_chunk("A.hwp", "요구사항 56개"),
+        make_chunk("A.hwp", "표지"),
+        make_chunk("B.hwp", "요구사항 29개"),
+    ]
+
+    assert check_content_hit(chunks, {"A.hwp": ["56개"]}) == 1
+    assert check_content_hit(chunks, {"A.hwp": ["56개"], "B.hwp": ["29개"]}) == 3
+    assert check_content_hit(chunks, {"A.hwp": ["56개"], "B.hwp": ["99개"]}) is None
+    assert check_content_hit(chunks, {"B.hwp": ["56개"]}) is None  # 다른 문서 조각은 안 셈
+    assert check_content_hit(chunks, {"A.hwp": ["56개"], "B.hwp": []}) == 3  # 빈 짝: 사업명만
+
+
+def test_score_content_is_stricter_than_project_name(tmp_path: Path) -> None:
+    """정답 문서 조각이어도 정답 글자가 없으면: 사업명 기준은 맞음, 내용 기준은 틀림."""
+    academic_scope_chunk = make_fake_chunks()[5]  # 라마대학교 '사업 범위' 조각 (참가 자격 없음)
+    questions = [make_question("Q001", academic_scope_chunk.page_content, ACADEMIC[2], "3년")]
+
+    result = score(questions, make_saved_store(tmp_path), make_projects(), k=1)
+
+    assert result["score"] == 1.0
+    assert result["content_score"] == 0.0
+    assert result["content_wrong_question_ids"] == ["Q001"]
+
+
+def test_score_content_hit_records_rank(tmp_path: Path) -> None:
+    """정답 글자가 든 조각을 찾아오면 내용 기준도 맞음이고 등수를 남긴다."""
+    qualification_chunk = make_fake_chunks()[6]  # 라마대학교 '참가 자격' 조각
+    questions = [make_question("Q002", qualification_chunk.page_content, ACADEMIC[2], "3년")]
+
+    result = score(questions, make_saved_store(tmp_path), make_projects(), k=1)
+
+    assert result["content_score"] == 1.0
+    assert result["rows"][0]["content_rank"] == 1
+
+
+def test_score_skips_follow_up_and_missing_answer(tmp_path: Path) -> None:
+    """후속 질문은 두 점수 모두에서 빼고, 문서에 없는 정답은 '조각에 정답 없음'으로 따로 센다."""
+    questions = [
+        make_question("Q003", "그 사업 예산은?", ACADEMIC[2], "820,000,000원", "후속 질문"),
+        make_question("Q004", "인력은?", HOMEPAGE[2], "99명"),
+    ]
+
+    result = score(questions, make_saved_store(tmp_path), make_projects(), k=5)
+
+    assert result["skipped_follow_up"] == 1
+    assert result["counted"] == 1
+    assert result["content_counted"] == 0
+    assert result["answer_missing_question_ids"] == ["Q004"]
