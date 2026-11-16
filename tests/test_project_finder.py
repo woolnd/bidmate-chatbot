@@ -4,6 +4,49 @@ from bidmate.retrieval.project_finder import find_project_ids
 from bidmate.schemas import ProjectInfo
 
 
+@pytest.mark.parametrize(
+    ("second", "expected"),
+    [
+        ("누리대학교 가상실습 서버 이전 공고문에 나온 산출물은?", ["alpha", "beta"]),
+        ("누리대학교 사업 마감일은?", ["alpha"]),
+        ("누리대학교 가상실습 서버 이전 사업은 빼고 알려줘", ["alpha"]),
+        ("가온연구원 모의관측 기록장치 교체 사업의 산출물은?", ["alpha"]),
+    ],
+)
+def test_two_separately_asked_projects(second: str, expected: list[str]) -> None:
+    projects = [
+        ProjectInfo(
+            project_id="alpha",
+            agency_name="가온연구원",
+            project_name="모의관측 기록장치 교체",
+            budget=1,
+            deadline="2024-12-15",
+        ),
+        ProjectInfo(
+            project_id="beta",
+            agency_name="누리대학교",
+            project_name="가상실습 서버 이전",
+            budget=1,
+            deadline="2024-12-15",
+        ),
+    ]
+    question = f"가온연구원 모의관측 기록장치 교체 용역에서 설치 방식은? 그리고 {second}"
+    assert find_project_ids(question, projects) == expected
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_keep_named_project_when_other_request_is_out_of_catalog(reverse: bool) -> None:
+    projects = [
+        ProjectInfo("alpha", "가온연구원", "모의관측 기록장치 교체", None, None),
+        ProjectInfo("beta", "누리대학교", "가상실습 서버 이전", None, None),
+    ]
+    listed = "가온연구원 모의관측 기록장치 교체 용역에서 설치 방식은?"
+    missing = "발주처: 미등록연구원, 해저드론 분실방지 사업 예산은?"
+    assert find_project_ids(missing, projects) == []
+    first, second = (missing, listed) if reverse else (listed, missing)
+    assert find_project_ids(f"{first} 또 {second}", projects) == ["alpha"]
+
+
 @pytest.fixture
 def projects() -> list[ProjectInfo]:
     return [

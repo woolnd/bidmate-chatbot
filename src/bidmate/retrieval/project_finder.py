@@ -152,6 +152,7 @@ PROJECT_SEPARATOR = re.compile(
     r"(?<=[가-힣a-z0-9])(?:이랑|하고|랑|과|와)(?=\s)|\s+(?:및|그리고|vs\.?)\s+"
     r"|,\s*|[/·&+]\s*(?=[가-힣a-z])"
 )
+REQUEST_SEPARATOR = re.compile(r"\?\s*(?:그리고|또|아울러)\s+")
 
 EXCLUSION_VERBS = r"말고|제외하고|제외한|제외하여|빼고"
 PROJECT_EXCLUSION = re.compile(EXCLUSION_VERBS)
@@ -515,7 +516,46 @@ def find_project_ids(
     기관명만 식별된 질문은 해당 기관의 전체 후보를 반환한다.
     특정 사업을 물었는데 일치하는 후보가 없으면 빈 목록을 반환한다.
     """
-    return _find_project_ids(question, projects)
+    selected = _find_project_ids(question, projects)
+    if len(selected) > 1 or ("?" not in question and "？" not in question):
+        return selected
+    normalized = _normalize(question)
+    parts = REQUEST_SEPARATOR.split(normalized, maxsplit=2)
+    if len(parts) != 2 or not all(part.strip() for part in parts):
+        return selected
+    if PROJECT_EXCLUSION.search(normalized):
+        return selected
+    first, second = (_find_project_ids(part, projects, allow_agency_pool=False) for part in parts)
+    if len(first) == len(second) == 1 and first != second and selected in (first, second):
+        return first + second
+    if not selected:
+        if len(first) == 1 and not second:
+            return _keep_exact_project(parts[0], first[0], parts[1], projects)
+        if len(second) == 1 and not first:
+            return _keep_exact_project(parts[1], second[0], parts[0], projects)
+    return selected
+
+
+def _keep_exact_project(
+    question: str, project_id: str, unmatched: str, projects: list[ProjectInfo]
+) -> list[str]:
+    if not has_explicit_project_scope(unmatched, projects):
+        return []
+    if _find_project_ids(unmatched, projects):
+        return []
+    for project in projects:
+        if project.project_id != project_id:
+            continue
+        title = _normalize(project.project_name).split()
+        if sum(map(len, title)) < 4:
+            continue
+        pattern = r"\s*".join(map(re.escape, title))
+        if any(
+            TITLE_END.match(question, match.end())
+            for match in re.finditer(rf"(?<![가-힣a-z0-9]){pattern}", question)
+        ):
+            return [project_id]
+    return []
 
 
 def select_project_scope(question: str, projects: list[ProjectInfo]) -> tuple[list[str], bool]:
