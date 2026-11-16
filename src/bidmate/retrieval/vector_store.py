@@ -25,6 +25,7 @@
 """
 
 import logging
+from functools import partial
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -165,7 +166,7 @@ def search_chunks(
     k: int,
     vector_store: Chroma | None = None,
 ) -> list[tuple[Document, float]]:
-    """고른 문서 안에서 질문과 뜻이 비슷한 조각 k개를 찾는다. 빈 목록이면 전체에서 찾는다.
+    """고른 문서에서 조각을 찾고, 한도 안에서 문서마다 조각을 하나 이상 확보한다.
 
     받는 것: question (1단계가 다듬은 질문), project_ids (2단계가 고른 문서. 못 고르면 빈 목록),
              k (찾아올 조각 수, 보통 config.TOP_K),
@@ -183,11 +184,38 @@ def search_chunks(
     if vector_store is None:
         vector_store = get_vector_store()
 
-    # 3. 거르기 조건 만들기: project_ids가 있으면 그 문서 조각만, 빈 목록이면 None(전체)
+    project_ids = list(dict.fromkeys(project_ids))
     project_filter = make_project_filter(project_ids)
+    cover_all_projects = 1 < len(project_ids) <= k
+    embeddings = vector_store.embeddings
+    lookup = partial(vector_store.similarity_search_with_score, question)
+    if cover_all_projects and embeddings is not None:
+        lookup = partial(
+            vector_store.similarity_search_by_vector_with_relevance_scores,
+            embeddings.embed_query(question),
+        )
 
-    # 4. 질문을 임베딩해서 가장 가까운 조각 k개 찾기 (거리가 작은 순서로 온다)
-    results = vector_store.similarity_search_with_score(question, k=k, filter=project_filter)
+    results = lookup(k=k, filter=project_filter)
+    if cover_all_projects and results:
+        first_by_project = {}
+        remaining = []
+        for result in results:
+            project_id = result[0].metadata["project_id"]
+            if project_id in first_by_project:
+                remaining.append(result)
+            else:
+                first_by_project[project_id] = result
+
+        missing_projects = [pid for pid in project_ids if pid not in first_by_project]
+        if missing_projects:
+            for project_id in missing_projects:
+                nearest = lookup(k=1, filter=make_project_filter([project_id]))
+                if nearest:
+                    first_by_project[project_id] = nearest[0]
+            results = sorted(
+                [*first_by_project.values(), *remaining[: k - len(first_by_project)]],
+                key=lambda item: item[1],
+            )
 
     # 5. 0개면 이유를 경고로 남긴다. 4단계는 0개면 "찾은 문서에 없습니다"라고만 답해서
     #    여기서 이유를 남기지 않으면 저장 문제인지, project_id 문제인지 알 수 없다

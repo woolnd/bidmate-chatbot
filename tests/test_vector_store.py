@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_core.embeddings import DeterministicFakeEmbedding
+from langchain_core.embeddings import DeterministicFakeEmbedding, Embeddings
 
 import bidmate.retrieval.vector_store as vector_store_module
 from bidmate.config import COLLECTION_NAME
@@ -178,6 +178,38 @@ def make_saved_store(folder: Path) -> Chroma:
     vector_store = make_test_store(folder)
     save_chunks(make_fake_chunks(), vector_store)
     return vector_store
+
+
+def test_multi_project_search_covers_both_documents_with_one_embedding(tmp_path: Path) -> None:
+    class FixedEmbeddings(Embeddings):
+        query_count = 0
+
+        def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            return [[float(text), 0.0] for text in texts]
+
+        def embed_query(self, text: str) -> list[float]:
+            self.query_count += 1
+            return [0.0, 0.0]
+
+    embedding = FixedEmbeddings()
+    store = get_vector_store(embedding, tmp_path)
+    project_ids = ["가 사업 [1].hwp", "나 사업 (2).pdf"]
+    store.add_texts(
+        ["0", "1", "5", "0.1"],
+        metadatas=[
+            {"project_id": project_ids[0]},
+            {"project_id": project_ids[0]},
+            {"project_id": project_ids[1]},
+            {"project_id": "다 사업.hwp"},
+        ],
+        ids=["a0", "a1", "b0", "other0"],
+    )
+
+    results = search_chunks("두 사업 비교", [*project_ids, project_ids[0]], 2, store)
+
+    assert [doc.metadata["project_id"] for doc, _ in results] == project_ids
+    assert [doc.page_content for doc, _ in results] == ["0", "5"]
+    assert embedding.query_count == 1
 
 
 def test_make_project_filter() -> None:
