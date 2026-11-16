@@ -454,6 +454,24 @@ def _exclude_conflicting_editions(question: str, projects: list[ProjectInfo]) ->
     return projects
 
 
+def _title_edition_pattern(title: str) -> tuple[str, tuple[str, ...]]:
+    markers = sorted(
+        (match.start(), match.end(), match[1], replacement)
+        for pattern, replacement in (
+            (PROJECT_YEAR, r"(20\d{2})(?:년(?:도)?)?"),
+            (PROJECT_ROUND, r"(\d{1,2})차"),
+        )
+        for match in pattern.finditer(title)
+    )
+    parts = []
+    start = 0
+    for left, right, _, replacement in markers:
+        parts.extend((re.escape(re.sub(r"\s+", "", title[start:left])), replacement))
+        start = right
+    parts.append(re.escape(re.sub(r"\s+", "", title[start:])))
+    return "".join(parts), tuple(number for _, _, number, _ in markers)
+
+
 def _fill_shared_project_name(parts: list[str], agency_tokens: set[str]) -> None:
     """연도나 차수만 먼저 나열했으면 마지막 구간에 나온 사업명을 이어 붙인다."""
     for index in range(len(parts) - 2, -1, -1):
@@ -620,18 +638,30 @@ def _find_project_ids(
     compact_question = "".join(question[index] for index in character_positions)
     exact_titles = []
     title_positions: list[tuple[int, int]] = []
+    edition_positions: list[tuple[int, int]] = []
+    conflicting_editions: set[str] = set()
+    matching_editions: set[str] = set()
     exact_spans: dict[str, list[tuple[int, int]]] = {}
     embedded_titles: set[str] = set()
     agency_keys = {_compact_agency_name(agency) for agency in matched_agencies}
+    has_edition = bool(PROJECT_YEAR.search(question) or PROJECT_ROUND.search(question))
     for project in sorted(
         search_projects,
         key=lambda value: len(re.sub(r"\s+", "", _normalize(value.project_name))),
         reverse=True,
     ):
-        title = re.sub(r"\s+", "", _normalize(project.project_name))
+        normalized_title = _normalize(project.project_name)
+        title = re.sub(r"\s+", "", normalized_title)
         if len(title) < 4:
             continue
-        for match in re.finditer(re.escape(title), compact_question):
+        title_matches = [(match, ()) for match in re.finditer(re.escape(title), compact_question)]
+        if has_edition:
+            edition_pattern, editions = _title_edition_pattern(normalized_title)
+            if editions:
+                title_matches.extend(
+                    (match, editions) for match in re.finditer(edition_pattern, compact_question)
+                )
+        for match, editions in title_matches:
             start, end = match.span()
             if any(
                 left <= start and end <= right and end - start < right - left
@@ -646,7 +676,15 @@ def _find_project_ids(
                 or compact_question[:start] in agency_keys
             )
             if not starts_name or not TITLE_END.match(question, raw_end):
-                embedded_titles.add(project.project_id)
+                if not editions:
+                    embedded_titles.add(project.project_id)
+                continue
+            if editions:
+                edition_positions.append((start, end))
+                if match.groups() == editions:
+                    matching_editions.add(project.project_id)
+                else:
+                    conflicting_editions.add(project.project_id)
                 continue
             title_positions.append((start, end))
             exact_spans.setdefault(project.project_id, []).append((raw_start, raw_end))
@@ -657,10 +695,11 @@ def _find_project_ids(
             for project in search_projects
             if project.project_id not in embedded_titles or project.project_id in exact_spans
         ]
+    protected_positions = title_positions + edition_positions
     detail = None
     for marker in CONTENT_BOUNDARY.finditer(question):
         offset = len(re.sub(r"\s+", "", question[: marker.start()]))
-        if not any(start < offset < end for start, end in title_positions):
+        if not any(start < offset < end for start, end in protected_positions):
             detail = marker
             break
 
@@ -685,7 +724,7 @@ def _find_project_ids(
                 if word.group() in title_words:
                     continue
         offset = len(re.sub(r"\s+", "", question[: match.start()]))
-        if not any(start < offset < end for start, end in title_positions):
+        if not any(start < offset < end for start, end in protected_positions):
             boundaries.append(match)
 
     separators = []
@@ -787,6 +826,11 @@ def _find_project_ids(
         question[: detail.start()] if detail else question,
         search_projects,
     )
+    excluded_editions = conflicting_editions - matching_editions - exact_spans.keys()
+    if excluded_editions:
+        scoped_projects = [
+            project for project in scoped_projects if project.project_id not in excluded_editions
+        ]
     if len(scoped_projects) != len(search_projects):
         search_projects = scoped_projects
         exact_titles = [project for project in exact_titles if project in search_projects]

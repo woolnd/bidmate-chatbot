@@ -551,3 +551,36 @@ def test_short_partial_match_needs_more_evidence_in_a_longer_query():
     ]
     assert find_project_ids("가나다기관 연구 예산", projects) == ["records"]
     assert find_project_ids("가나다기관 별도과제 연구 예산", projects) == []
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("가나다기관 2099년 데이터 수집 및 통합 운영 사업 마감일?", []),
+        ("가나다기관 2099년도 데이터 수집 및 통합 운영 사업 마감일?", []),
+        ("가나다기관 2025년 데이터 수집 및 통합 운영 사업 마감일?", ["data"]),
+        (
+            "가나다기관 2025년 데이터 수집 및 통합 운영과 기록보존 사업 각각 예산",
+            ["data", "archive"],
+        ),
+        ("가나다기관 2099년 데이터 수집 및 통합 운영과 기록보존 사업 각각 예산", ["archive"]),
+    ],
+)
+def test_preserves_edition_scope_inside_a_title_with_conjunction(question, expected):
+    projects = [
+        ProjectInfo("data", "가나다기관", "2025년 데이터 수집 및 통합 운영", None, None),
+        ProjectInfo("archive", "가나다기관", "기록보존 체계 개선", None, None),
+    ]
+    assert find_project_ids(question, projects) == expected
+
+
+def test_rejects_a_conflicting_year_inside_a_title_with_two_year_references():
+    projects = [
+        ProjectInfo("data", "가나다기관", "2025년 데이터 수집 및 통합 2025년 운영", None, None),
+    ]
+    assert find_project_ids("가나다기관 2025년 데이터 수집 및 통합 2025년 운영 예산", projects) == [
+        "data"
+    ]
+    assert (
+        find_project_ids("가나다기관 2099년 데이터 수집 및 통합 2025년 운영 예산", projects) == []
+    )
