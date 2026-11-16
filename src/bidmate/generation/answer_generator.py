@@ -11,13 +11,17 @@ gpt-5-mini는 temperature를 바꿀 수 없어서 최대 800토큰과 reasoning_
 
 from langchain_core.documents import Document
 from langchain_core.runnables import Runnable
+from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
 from bidmate.config import (
     ANSWER_MAX_TOKENS,
     ANSWER_MODEL_NAME,
+    ANSWER_PROVIDER,
     ANSWER_REASONING_EFFORT,
     MAX_HISTORY_TURNS,
+    OLLAMA_MODEL_NAME,
+    OLLAMA_TEMPERATURE,
     OPENAI_TIMEOUT_SECONDS,
 )
 from bidmate.generation.prompts import build_answer_messages
@@ -33,15 +37,27 @@ def make_answer_model() -> Runnable:
     받는 것: 없음 (설정값은 config.py에서 가져온다)
     넘기는 것: invoke(메시지)하면 AnswerResult를 돌려주는 모델
     """
-    # 1. ChatOpenAI 만들기 (1단계 make_rewrite_model과 같은 모양, 설정값만 ANSWER_…)
-    model = ChatOpenAI(
-        model=ANSWER_MODEL_NAME,
-        reasoning_effort=ANSWER_REASONING_EFFORT,
-        max_completion_tokens=ANSWER_MAX_TOKENS,
-        timeout=OPENAI_TIMEOUT_SECONDS,
-    )
+    # 1. 설정이 ollama면 로컬 모델 (시나리오 A)
+    #    reasoning=False: 생각을 끈다
+    #    (생각까지 하면 10초를 넘기 쉽고, 생각 글자도 토큰 한도에 세어진다)
+    if ANSWER_PROVIDER == "ollama":
+        model = ChatOllama(
+            model=OLLAMA_MODEL_NAME,
+            temperature=OLLAMA_TEMPERATURE,
+            num_predict=ANSWER_MAX_TOKENS,
+            reasoning=False,
+        )
+    # 2. 아니면 OpenAI (시나리오 B, 1단계 make_rewrite_model과 같은 모양, 설정값만 ANSWER_…)
+    else:
+        model = ChatOpenAI(
+            model=ANSWER_MODEL_NAME,
+            reasoning_effort=ANSWER_REASONING_EFFORT,
+            max_completion_tokens=ANSWER_MAX_TOKENS,
+            timeout=OPENAI_TIMEOUT_SECONDS,
+        )
 
-    # 2. 구조화된 출력을 붙인다: invoke 결과가 AIMessage가 아니라 AnswerResult로 나온다
+    # 3. 구조화된 출력을 붙인다: invoke 결과가 AIMessage가 아니라 AnswerResult로 나온다
+    #    (Ollama, OpenAI 둘 다 같은 모양)
     return model.with_structured_output(AnswerResult)
 
 
