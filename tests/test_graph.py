@@ -26,7 +26,7 @@ def test_four_steps_run_in_order_and_pass_values(monkeypatch):
 
     def fake_find(question, projects):
         called_steps.append(("find", question))
-        return ["가나다공단_이러닝.hwp"]
+        return ["가나다공단_이러닝.hwp"], False
 
     def fake_search(question, project_ids, k):
         called_steps.append(("search", question, project_ids))
@@ -38,7 +38,7 @@ def test_four_steps_run_in_order_and_pass_values(monkeypatch):
 
     monkeypatch.setattr(graph, "rewrite_question", fake_rewrite)
     monkeypatch.setattr(graph, "get_projects", lambda: [])
-    monkeypatch.setattr(graph, "find_project_ids", fake_find)
+    monkeypatch.setattr(graph, "select_project_scope", fake_find)
     monkeypatch.setattr(graph, "search_chunks", fake_search)
     monkeypatch.setattr(graph, "generate_answer", fake_answer)
 
@@ -62,7 +62,7 @@ def test_empty_search_gives_no_evidence_answer(monkeypatch):
     # 2·3단계가 빈 목록이면 4단계가 AI를 부르지 않고 "찾은 문서에 없습니다"
     # (대화 기록이 없으면 1단계도 AI를 부르지 않는다. 4단계는 진짜 함수 그대로)
     monkeypatch.setattr(graph, "get_projects", lambda: [])
-    monkeypatch.setattr(graph, "find_project_ids", lambda question, projects: [])
+    monkeypatch.setattr(graph, "select_project_scope", lambda question, projects: ([], False))
     monkeypatch.setattr(graph, "search_chunks", lambda question, project_ids, k: [])
 
     state = run_chatbot("예산은?", [])
@@ -120,3 +120,34 @@ def test_comparison_passes_both_exact_document_ids_to_search(monkeypatch):
 
     assert calls == [["  포털 (1).hwp", "정산 [2].pdf"]]
     assert state["project_ids"] == calls[0]
+
+
+def test_short_edition_miss_does_not_retry_against_other_projects(monkeypatch):
+    projects = [
+        ProjectInfo("records25", "가나다기관", "2025년 문서관리시스템 운영", None, None),
+        ProjectInfo("backup2", "가나다기관", "통합백업센터 구축 2차", None, None),
+        ProjectInfo("records-other", "라마바기관", "문서관리시스템 운영", None, None),
+    ]
+    monkeypatch.setattr(graph, "get_projects", lambda: projects)
+    searches = []
+
+    def fake_search(question, project_ids, k):
+        searches.append((question, project_ids))
+        return []
+
+    monkeypatch.setattr(graph, "search_chunks", fake_search)
+    for question in (
+        "2026년 문서관리시스템 운영 예산",
+        "가나다기관 2026년 문서관리 예산",
+        "가나다기관 통합백업센터 3차 예산",
+    ):
+        state = run_chatbot(question, [])
+        assert state["project_ids"] == []
+        assert state["catalog_miss"]
+        assert not state["answer_result"].has_evidence
+
+    open_question = "2026년 전기공사 참가 자격은?"
+    run_chatbot(open_question, [])
+    comparison = "가나다기관 2025년 문서관리와 2026년 문서관리 각각 예산"
+    run_chatbot(comparison, [])
+    assert searches == [(open_question, []), (comparison, ["records25"])]

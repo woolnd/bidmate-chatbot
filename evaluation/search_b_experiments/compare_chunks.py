@@ -15,7 +15,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from bidmate.config import TOP_K
-from bidmate.retrieval.project_finder import find_project_ids, has_explicit_project_scope
+from bidmate.retrieval.project_finder import select_project_scope
 from evaluation import score_search
 from evaluation.score_project_finder import _name_key
 from evaluation.score_search import (
@@ -143,7 +143,7 @@ def main():
             if not expected:
                 continue
             question = row["question"]
-            found = find_project_ids(question, projects)
+            found, catalog_miss = select_project_scope(question, projects)
             matched = match_keywords_to_projects(row, expected) if get_keywords(row) else {}
             origins = {
                 pid: {
@@ -172,7 +172,7 @@ def main():
                 ("oracle", expected),
                 (
                     "actual",
-                    found or ([] if has_explicit_project_scope(question, projects) else None),
+                    found or ([] if catalog_miss else None),
                 ),
             ):
                 attempts = {}

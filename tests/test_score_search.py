@@ -267,3 +267,27 @@ def test_score_skips_follow_up_and_missing_answer(tmp_path: Path) -> None:
     assert result["counted"] == 1
     assert result["content_counted"] == 0
     assert result["answer_missing_question_ids"] == ["Q004"]
+
+
+def test_score_applies_same_catalog_miss_as_chatbot(monkeypatch, tmp_path):
+    project = ProjectInfo("records25", "가나다기관", "2025년 문서관리시스템 운영", None, None)
+    queries = [
+        make_question("wrong-year", "가나다기관 2026년 문서관리 예산", project.project_name),
+        make_question("open", "2026년 전기공사 참가 자격은?", project.project_name),
+    ]
+    search_calls = []
+
+    def fake_search(question, project_ids, k, vector_store):
+        search_calls.append((question, project_ids))
+        return make_found(project.project_name)
+
+    monkeypatch.setattr("evaluation.score_search.search_chunks", fake_search)
+    store = make_saved_store(tmp_path)
+    actual = score(queries, store, [project])
+    assert search_calls == [(queries[1]["question"], [])]
+    assert actual["wrong_question_ids"] == ["wrong-year"]
+
+    search_calls.clear()
+    oracle = score(queries[:1], store, [project], use_expected_projects=True)
+    assert search_calls == [(queries[0]["question"], ["records25"])]
+    assert oracle["score"] == 1.0

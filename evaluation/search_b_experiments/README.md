@@ -68,6 +68,15 @@ uv run --locked python -m evaluation.search_b_experiments.slot_trial \
   "$CATALOG" "$QUESTIONS" "$OUT/slots.json"
 ```
 
+문서 선택의 효과를 비교하려면 같은 Chroma 재현 명령에 기준 문서 선택 코드 사본을 붙입니다. 기준은 검색 범위가 비었을 때 전체 검색을 하던 `ee3614e`입니다.
+
+```sh
+git show ee3614e:src/bidmate/retrieval/project_finder.py > "$OUT/main-selector.py"
+uv run --locked python -m evaluation.search_b_experiments.score_chroma_replay \
+  "$OUT/chroma" "$OUT/corpus.json" "$OUT/chunks.json" "$CATALOG" "$QUESTIONS" \
+  "$OUT/chroma-comparison.json" --baseline "$OUT/main-selector.py"
+```
+
 개체명 인식 학습과 평가는 내부 목록표에서 만든 학습 문장과 로컬 체크포인트가 필요합니다. 공개 결과 문서에서 모델별 설정과 점수를 확인할 수 있습니다.
 
 ## PR에 남기는 내용

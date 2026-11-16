@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from bidmate.pipeline import graph
 from bidmate.retrieval.vector_store import make_project_filter, search_chunks
-from evaluation.score_project_finder import score
+from evaluation.score_project_finder import _load_baseline, _sha256, score
 from evaluation.score_search import check_content_hit, load_questions
 from evaluation.search_b_experiments.build_local_chroma import (
     LocalEmbeddings,
@@ -112,6 +112,7 @@ def main():
     parser = argparse.ArgumentParser()
     for field in ("database", "corpus", "reference", "catalog", "questions", "output"):
         parser.add_argument(field, type=Path)
+    parser.add_argument("--baseline", type=Path, help="전체 검색을 허용했던 기준 문서 선택 코드")
     args = parser.parse_args()
     manifest = json.loads((args.database / "manifest.json").read_text())
     assert manifest["input_sha256"] == digests(args.corpus, args.reference, args.catalog)
@@ -158,6 +159,21 @@ def main():
     actual = list(measure(refs["rows"], graph_results, store, embeddings, refs["k"], oracle=False))
     oracle = list(measure(refs["rows"], graph_results, store, embeddings, refs["k"], oracle=True))
     results = {"actual": summarize(actual), "oracle": summarize(oracle)}
+    details = {"actual": actual, "oracle": oracle}
+    if args.baseline:
+        baseline = _load_baseline(args.baseline)
+        baseline_scopes = {
+            row["question_id"]: {
+                "project_ids": baseline(row["question"], projects),
+                "catalog_miss": False,
+            }
+            for row in refs["rows"]
+        }
+        details["baseline_selector"] = list(
+            measure(refs["rows"], baseline_scopes, store, embeddings, refs["k"], oracle=False)
+        )
+        results["baseline_selector"] = summarize(details["baseline_selector"])
+        print("baseline_selector", results["baseline_selector"], flush=True)
     print(
         "selection",
         team["correct"],
@@ -173,13 +189,14 @@ def main():
         json.dumps(
             {
                 "manifest": manifest,
+                "baseline_sha256": _sha256(args.baseline) if args.baseline else None,
                 "tests": results,
                 "selection": {
                     "correct": team["correct"],
                     "counted": team["counted"],
                     "graph_multi_comparisons": search_calls,
                 },
-                "details": {"actual": actual, "oracle": oracle},
+                "details": details,
             },
             ensure_ascii=False,
             indent=2,

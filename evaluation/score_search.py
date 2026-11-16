@@ -43,7 +43,7 @@ from langchain_core.documents import Document
 
 from bidmate.config import PROJECT_LIST_PATH, PROJECT_ROOT, TOP_K
 from bidmate.data.metadata import load_project_list
-from bidmate.retrieval.project_finder import find_project_ids
+from bidmate.retrieval.project_finder import select_project_scope
 from bidmate.retrieval.vector_store import get_vector_store, search_chunks
 from bidmate.schemas import ProjectInfo
 
@@ -252,6 +252,9 @@ def score(
         "rows": 질문별 결과 (틀린 이유를 볼 때 쓴다),
     }
     """
+    if k < 1:
+        raise ValueError(f"k는 1 이상이어야 합니다: {k}")
+
     # 1. 준비: 저장소와 목록표 (테스트에서는 가짜가 들어온다)
     if vector_store is None:
         vector_store = get_vector_store()
@@ -288,12 +291,17 @@ def score(
                 for name in expected_project_names
                 if name in project_id_by_name
             ]
+            catalog_miss = False
         else:
-            project_ids = find_project_ids(question["question"], projects)
+            project_ids, catalog_miss = select_project_scope(question["question"], projects)
 
         # 5. 찾기 + 걸린 시간 재기
         start_time = time.perf_counter()
-        chunks = search_chunks(question["question"], project_ids, k, vector_store)
+        chunks = (
+            []
+            if catalog_miss
+            else search_chunks(question["question"], project_ids, k, vector_store)
+        )
         search_seconds = time.perf_counter() - start_time
 
         # 6. 내용 기준 판정 (정답 문서 안에 정답 글자가 든 조각을 찾아왔나)

@@ -518,12 +518,22 @@ def find_project_ids(
     return _find_project_ids(question, projects)
 
 
+def select_project_scope(question: str, projects: list[ProjectInfo]) -> tuple[list[str], bool]:
+    """문서 ID와 명시한 사업 범위에 후보가 없는지를 반환한다."""
+    project_ids = find_project_ids(question, projects)
+    return project_ids, not project_ids and has_explicit_project_scope(question, projects)
+
+
 def has_explicit_project_scope(question: str, projects: list[ProjectInfo]) -> bool:
     """문서 후보가 비었을 때 질문에 목록 조회 범위가 명시됐는지 확인한다."""
     if not projects:
         return False
     question = _normalize(question).strip()
     if ISSUER_REFERENCE.search(question) or _has_unlisted_issuer_prefix(question, projects):
+        return True
+    detail = CONTENT_BOUNDARY.search(question)
+    subject = question[: detail.start()] if detail else question
+    if _has_explicit_edition(subject, projects):
         return True
     reference = PROJECT_REFERENCE.search(question)
     if reference is None:
@@ -546,6 +556,30 @@ def has_explicit_project_scope(question: str, projects: list[ProjectInfo]) -> bo
         if agency_keys & {_compact_agency_name(name) for name in names}:
             agency_tokens.update(_tokenize(alias))
     return not _is_agency_wide_query(subject_tokens - agency_tokens)
+
+
+def _has_explicit_edition(subject: str, projects: list[ProjectInfo]) -> bool:
+    without_editions = PROJECT_ROUND.sub(" ", PROJECT_YEAR.sub(" ", subject))
+    if without_editions == subject or _tokenize(subject) & OPEN_SCOPE_WORDS:
+        return False
+    positions = [index for index, char in enumerate(subject) if not char.isspace()]
+    compact_subject = "".join(subject[index] for index in positions)
+    agencies = _get_agency_matches(subject, projects)
+    prefixes = {"", *(_compact_agency_name(agency) for agency in agencies)}
+    starts = {len(prefix) for prefix in prefixes if compact_subject.startswith(prefix)}
+    for project in projects:
+        if agencies and project.agency_name not in agencies:
+            continue
+        pattern, editions = _title_edition_pattern(_normalize(project.project_name))
+        if not editions:
+            continue
+        for start in starts:
+            match = re.match(pattern, compact_subject[start:])
+            if match and TITLE_END.match(subject, positions[start + match.end() - 1] + 1):
+                return True
+    unversioned_ids = set(_find_project_ids(without_editions, projects, allow_agency_pool=False))
+    candidates = [project for project in projects if project.project_id in unversioned_ids]
+    return bool(candidates) and not _exclude_conflicting_editions(subject, candidates)
 
 
 def _find_project_ids(
@@ -639,6 +673,7 @@ def _find_project_ids(
     exact_titles = []
     title_positions: list[tuple[int, int]] = []
     edition_positions: list[tuple[int, int]] = []
+    conflicting_spans: list[tuple[int, int]] = []
     conflicting_editions: set[str] = set()
     matching_editions: set[str] = set()
     exact_spans: dict[str, list[tuple[int, int]]] = {}
@@ -685,6 +720,7 @@ def _find_project_ids(
                     matching_editions.add(project.project_id)
                 else:
                     conflicting_editions.add(project.project_id)
+                    conflicting_spans.append((raw_start, raw_end))
                 continue
             title_positions.append((start, end))
             exact_spans.setdefault(project.project_id, []).append((raw_start, raw_end))
@@ -822,6 +858,17 @@ def _find_project_ids(
             return []
 
     # 본문에 나오는 납기나 지원 연도는 사업 이름의 연도와 따로 본다.
+    if conflicting_spans and not matching_editions:
+        exact_titles = [
+            project
+            for project in exact_titles
+            if any(
+                not any(left <= start and end <= right for left, right in conflicting_spans)
+                for start, end in exact_spans[project.project_id]
+            )
+        ]
+        if not exact_titles:
+            return []
     scoped_projects = _exclude_conflicting_editions(
         question[: detail.start()] if detail else question,
         search_projects,
