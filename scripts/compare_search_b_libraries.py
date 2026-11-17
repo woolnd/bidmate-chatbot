@@ -138,6 +138,30 @@ def _get_agency_matches_ahocorasick(
     return [agency for agency in matched if agency in known_agencies]
 
 
+def _weighted_coverage_vocab_filter(
+    query_tokens: set[str], matched_tokens: set[str], idf: dict[str, float]
+) -> float:
+    """IDF 가중치 대신, 목록표 사업명에 실제로 나오는 단어만 남기고 나머지는 버린다.
+
+    질문이 길어질수록 사업명에 없는 단어가 늘어나는데, 기존 `_weighted_coverage`는
+    그런 단어도 기본 가중치 1.0으로 분모에 넣어서 점수를 깎는다. 여기서는 사업명에
+    아예 없는 단어는 분모에서 빼버리고, 남은 단어는 전부 동일한 가중치로 센다.
+
+    "있다"의 기준은 완전 일치가 아니라 `_match_project_tokens`와 같은 부분 일치다
+    (예: 질문의 "문서관리"는 사업명 토큰 "문서관리시스템"의 부분이라 '있는' 단어다).
+    완전 일치로만 걸렀더니 이런 부분 일치 단어가 전부 '없는 단어'로 빠지는
+    버그가 있었음.
+    """
+    known_tokens = {
+        token
+        for token in query_tokens
+        if len(token) >= 2 and any(token in title_token for title_token in idf)
+    }
+    if not known_tokens:
+        return 0.0
+    return len(matched_tokens & known_tokens) / len(known_tokens)
+
+
 def run_candidate(name: str, questions: list[dict], projects: list[ProjectInfo], patch) -> dict:
     restore = patch()
     started = time.perf_counter()
@@ -197,6 +221,17 @@ def main() -> None:
         return restore
 
     run_candidate("Aho-Corasick", questions, projects, patch_ahocorasick)
+
+    def patch_vocab_filter():
+        original = pf._weighted_coverage
+        pf._weighted_coverage = _weighted_coverage_vocab_filter
+
+        def restore():
+            pf._weighted_coverage = original
+
+        return restore
+
+    run_candidate("IDF 대신 목록표 단어 필터", questions, projects, patch_vocab_filter)
 
 
 if __name__ == "__main__":
