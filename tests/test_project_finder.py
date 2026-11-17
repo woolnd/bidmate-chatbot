@@ -195,3 +195,10 @@ def test_split_falls_back_when_one_part_is_not_a_project(projects):
     question = "모바일오피스 예산과 기간은?"
 
     assert find_project_ids(question, projects) == ["rail-mobile.hwp"]
+
+
+def test_content_after_project_name_is_cut_off(projects):
+    """ "OO 사업에서 …" 꼴이면 사업명 뒤 질문 내용은 떼고 찾는다."""
+    question = "운행정보기록 자동분석시스템 사업에서 분석하는 기록 항목은 총 몇 개인가?"
+
+    assert find_project_ids(question, projects) == ["rail-operation.hwp"]

@@ -597,7 +597,15 @@ def find_project_ids(
     if split_ids:
         return split_ids
 
-    # 2. 나눠 찾기가 안 맞으면 질문 전체로 찾는다 (원래 방식)
+    # 2. "OO 사업에서 …"처럼 사업명 뒤에 질문 내용이 붙으면 앞부분만으로 찾는다
+    #    딱 1개 나올 때만 쓴다 (혜린님 #41의 mention 방식에서 가져옴)
+    boundary = CONTENT_BOUNDARY.search(_normalize(question))
+    if boundary:
+        subject_ids = _find_project_ids(_normalize(question)[: boundary.start()], projects)
+        if len(subject_ids) == 1:
+            return subject_ids
+
+    # 3. 둘 다 안 맞으면 질문 전체로 찾는다 (원래 방식)
     return _find_project_ids(question, projects)
 
 
