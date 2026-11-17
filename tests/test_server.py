@@ -79,9 +79,10 @@ def test_chat_returns_answer_in_promised_shape(monkeypatch):
 def test_chat_rejects_empty_question(monkeypatch):
     # 빈 질문은 run_chatbot까지 가지 않고 422 (ChatRequest의 min_length=1)
     monkeypatch.setattr(server, "APP_PASSWORD", "")
-    client = TestClient(server.app)
+    client = TestClient(server.app, raise_server_exceptions=False)
 
     assert client.post("/api/chat", json={"question": ""}).status_code == 422
+    assert client.post("/api/chat", json={"question": " \t "}).status_code == 422
 
 
 def test_projects_empty_without_project_list(monkeypatch):

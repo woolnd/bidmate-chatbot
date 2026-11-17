@@ -127,6 +127,41 @@ PARTICLES = (
     "와",
     "도",
 )
+# 혜린님 #41에서 추가한 조사 ("A랑 B", "A하고", "A만", "A의")
+PARTICLES = (
+    "에서",
+    "으로",
+    "에게",
+    "부터",
+    "까지",
+    "이랑",
+    "랑",
+    "하고",
+    "만을",
+    "만",
+    *PARTICLES[5:],
+    "의",
+)
+
+
+# 사업명 바로 뒤에 오는 질문 항목 ("OO 계약 방식", "OO 예산"). 혜린님 852b804 그대로.
+QUESTION_FIELD = re.compile(
+    r"(?:계약|기간|마감|마감일|사업비|예산|요구사항|일정|자격|제출|제출기한|제출서류)"
+    r"(?:은|는|이|가|을|를|의)?"
+)
+
+
+# 두 사업을 함께 묻는 표현 ("A와 B", "A과 B", "A 그리고 B"). "및"은 사업명 안에 많아 뺀다.
+# 혜린님 #41의 PROJECT_SEPARATOR에서 "과/와/그리고"만 가져왔다.
+PROJECT_SEPARATOR = re.compile(r"(?<=[가-힣a-z0-9])(?:과|와)(?=\s)|\s+그리고\s+")
+
+# "OO 사업의 기간은"처럼 사업명 뒤에 질문 내용이 시작되는 곳. 여기 앞까지만 사업명으로 본다.
+# 혜린님 #41의 CONTENT_BOUNDARY 그대로.
+CONTENT_BOUNDARY = re.compile(
+    r"(?:(?<=사업)|(?<=용역)|(?<=시스템)|(?<=운영)|(?<=구축)|(?<=개발)|(?<=고도화)|(?<=개선))"
+    r"(?:에서|에서는|에|에는|의|은|는)\s+"
+    r"|(?<!\S)(?:사용\s*시(?:에|에는)?|사용할\s+때|쓸\s+때)\s+"
+)
 
 
 def _normalize(text: str) -> str:
@@ -361,7 +396,7 @@ def _is_agency_wide_query(project_query_tokens: set[str]) -> bool:
     return not project_query_tokens or project_query_tokens <= generic_terms
 
 
-def find_project_ids(
+def _find_project_ids(
     question: str,
     projects: list[ProjectInfo],
 ) -> list[str]:
@@ -378,7 +413,7 @@ def find_project_ids(
         after_agencies = _get_agency_matches(exclusion[1], projects)
         if before_agencies and not after_agencies:
             projects = [p for p in projects if p.agency_name in before_agencies]
-        excluded_ids = set(find_project_ids(exclusion[0], projects))
+        excluded_ids = set(_find_project_ids(exclusion[0], projects))
         projects = [p for p in projects if p.project_id not in excluded_ids]
         if not _tokenize(exclusion[1]) and before_agencies:
             return list(dict.fromkeys(p.project_id for p in projects if p.project_id.strip()))
@@ -466,7 +501,7 @@ def find_project_ids(
         if matched_agencies:
             remaining_tokens -= agency_tokens
         extra_ids = (
-            find_project_ids(remainder, search_projects) if remaining_tokens - ACTION_WORDS else []
+            _find_project_ids(remainder, search_projects) if remaining_tokens - ACTION_WORDS else []
         )
         return list(dict.fromkeys([p.project_id for p in exact_titles] + extra_ids))
 
@@ -555,6 +590,24 @@ def find_project_ids(
         score = project_coverage * 0.85 + agency_bonus
         candidates.append((project.project_id, score))
 
+    # 후보가 없으면, 사업 하나에만 있는 사업명 단어(4글자 이상) 바로 뒤에 질문 항목이 오는지 본다
+    # 예: "연안관측망 계약 참여 자격 …" → 연안관측망 사업
+    # 제외 질문에는 쓰지 않는다 (혜린님 852b804)
+    if not candidates and len(exclusion) != 2:
+        for word, following_word in zip(ordered, ordered[1:]):
+            terms = _tokenize(word) & project_query_tokens - ACTION_WORDS
+            if not terms:
+                continue
+            term = next(iter(terms))
+            owners = [
+                project
+                for project in search_projects
+                if _match_project_tokens({term}, _tokenize(project.project_name))
+            ]
+            if len(term) >= 4 and len(owners) == 1 and QUESTION_FIELD.fullmatch(following_word):
+                return [owners[0].project_id]
+            break  # 첫 사업명 단어만 본다
+
     if not candidates:
         return []
 
@@ -568,3 +621,84 @@ def find_project_ids(
             if score >= best_score - 0.10 or (matched_agencies and multiple_terms_covered)
         )
     )
+
+
+def find_project_ids(
+    question: str,
+    projects: list[ProjectInfo],
+) -> list[str]:
+    """질문에 맞는 문서 ID 목록을 돌려준다. 두 사업을 함께 물으면 나눠서 찾는다.
+
+    받는 것: 질문, 목록표 사업 목록
+    넘기는 것: project_id 목록 (못 고르면 빈 목록)
+    """
+    # 1. "A와 B" 꼴이면 나눠서 각각 한 사업씩 찾는다
+    split_ids = _find_each_project(question, projects)
+    if split_ids:
+        return split_ids
+
+    # 2. "OO 사업에서 …"처럼 사업명 뒤에 질문 내용이 붙으면 앞부분만으로 찾는다
+    #    딱 1개 나올 때만 쓴다 (혜린님 #41의 mention 방식에서 가져옴)
+    boundary = CONTENT_BOUNDARY.search(_normalize(question))
+    if boundary:
+        subject_ids = _find_project_ids(_normalize(question)[: boundary.start()], projects)
+        if len(subject_ids) == 1:
+            return subject_ids
+
+    # 3. 둘 다 안 맞으면 질문 전체로 찾는다 (원래 방식)
+    return _find_project_ids(question, projects)
+
+
+def _find_each_project(question: str, projects: list[ProjectInfo]) -> list[str]:
+    """질문을 "과/와/그리고"로 나눠 부분마다 사업을 하나씩 찾는다. (혜린님 #41 방식)
+
+    받는 것: 질문, 목록표 사업 목록
+    넘기는 것: 부분마다 정확히 1개씩 찾고 서로 다른 문서가 2개 이상이면 그 목록, 아니면 빈 목록
+    """
+    # 1. "말고/빼고"가 있으면 나누지 않는다 (제외 질문은 원래 방식이 처리)
+    normalized = _normalize(question)
+    if re.search(r"말고|제외하고|빼고", normalized):
+        return []
+
+    # 2. 구분 기호 앞 단어가 사업명에 그대로 있는 단어면 나누지 않는다 (예: 사업명 속 "결과")
+    title_words = {
+        word
+        for project in projects
+        for word in re.findall(r"[가-힣a-z0-9]+", _normalize(project.project_name))
+    }
+    separators = []
+    for match in PROJECT_SEPARATOR.finditer(normalized):
+        word = re.search(r"[가-힣a-z0-9]+$", normalized[: match.end()])
+        if word and word.group() in title_words:
+            continue
+        separators.append(match)
+    if not separators:
+        return []
+
+    # 3. 구분 기호로 자른 부분마다 찾는다. 한 부분이라도 0개나 2개 이상이면 나눠 찾기를 포기한다
+    parts = []
+    start = 0
+    for separator in separators:
+        parts.append(normalized[start : separator.start()])
+        start = separator.end()
+    parts.append(normalized[start:])
+
+    found_ids = []
+    previous_agencies: list[str] = []
+    for part in parts:
+        # 사업명 뒤 질문 내용("…사업의 기간은 각각")은 떼고 사업명만으로 찾는다
+        boundary = CONTENT_BOUNDARY.search(part)
+        subject = part[: boundary.start()] if boundary else part
+        part_ids = _find_project_ids(subject, projects)
+        # 못 찾았고 기관명도 없으면 앞에 나온 기관을 붙여 다시 찾는다 ("코레일 A와 B" → B도 코레일)
+        agencies = _get_agency_matches(subject, projects)
+        if len(part_ids) != 1 and not agencies and previous_agencies:
+            part_ids = _find_project_ids(" ".join(previous_agencies) + " " + subject, projects)
+        previous_agencies = agencies or previous_agencies
+        if len(part_ids) != 1:
+            return []
+        found_ids.extend(part_ids)
+
+    # 4. 서로 다른 문서가 2개 이상일 때만 나눠 찾은 결과를 쓴다
+    unique_ids = list(dict.fromkeys(found_ids))
+    return unique_ids if len(unique_ids) >= 2 else []

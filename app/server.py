@@ -18,10 +18,11 @@ import hashlib
 import hmac
 import time
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, StringConstraints
 
 from bidmate.config import APP_PASSWORD, PROJECT_LIST_PATH
 from bidmate.pipeline.graph import get_projects, run_chatbot
@@ -51,7 +52,9 @@ class ProjectView(BaseModel):
 class ChatRequest(BaseModel):
     """화면이 보내는 질문. chat_history는 화면이 모아 둔 [[질문, 답변], ...]."""
 
-    question: str = Field(min_length=1, max_length=1000)
+    question: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)
+    ]
     chat_history: list[tuple[str, str]] = []
 
 
