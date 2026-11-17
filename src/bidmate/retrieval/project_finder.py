@@ -127,6 +127,28 @@ PARTICLES = (
     "와",
     "도",
 )
+# 혜린님 #41에서 추가한 조사 ("A랑 B", "A하고", "A만", "A의")
+PARTICLES = (
+    "에서",
+    "으로",
+    "에게",
+    "부터",
+    "까지",
+    "이랑",
+    "랑",
+    "하고",
+    "만을",
+    "만",
+    *PARTICLES[5:],
+    "의",
+)
+
+
+# 사업명 바로 뒤에 오는 질문 항목 ("OO 계약 방식", "OO 예산"). 혜린님 852b804 그대로.
+QUESTION_FIELD = re.compile(
+    r"(?:계약|기간|마감|마감일|사업비|예산|요구사항|일정|자격|제출|제출기한|제출서류)"
+    r"(?:은|는|이|가|을|를|의)?"
+)
 
 
 # 두 사업을 함께 묻는 표현 ("A와 B", "A과 B", "A 그리고 B"). "및"은 사업명 안에 많아 뺀다.
@@ -567,6 +589,24 @@ def _find_project_ids(
 
         score = project_coverage * 0.85 + agency_bonus
         candidates.append((project.project_id, score))
+
+    # 후보가 없으면, 사업 하나에만 있는 사업명 단어(4글자 이상) 바로 뒤에 질문 항목이 오는지 본다
+    # 예: "연안관측망 계약 참여 자격 …" → 연안관측망 사업
+    # 제외 질문에는 쓰지 않는다 (혜린님 852b804)
+    if not candidates and len(exclusion) != 2:
+        for word, following_word in zip(ordered, ordered[1:]):
+            terms = _tokenize(word) & project_query_tokens - ACTION_WORDS
+            if not terms:
+                continue
+            term = next(iter(terms))
+            owners = [
+                project
+                for project in search_projects
+                if _match_project_tokens({term}, _tokenize(project.project_name))
+            ]
+            if len(term) >= 4 and len(owners) == 1 and QUESTION_FIELD.fullmatch(following_word):
+                return [owners[0].project_id]
+            break  # 첫 사업명 단어만 본다
 
     if not candidates:
         return []

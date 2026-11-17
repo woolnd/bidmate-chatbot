@@ -202,3 +202,34 @@ def test_content_after_project_name_is_cut_off(projects):
     question = "운행정보기록 자동분석시스템 사업에서 분석하는 기록 항목은 총 몇 개인가?"
 
     assert find_project_ids(question, projects) == ["rail-operation.hwp"]
+
+
+# ---------- 혜린님 코드에서 가져온 규칙 (사업명 고유 단어로 다시 찾기) ----------
+
+
+@pytest.mark.parametrize("agency", ["", "한결연구원 "])
+def test_title_word_followed_by_question_field_is_recovered(agency):
+    """사업 하나에만 있는 사업명 단어 뒤에 "계약" 같은 질문 항목이 오면 그 사업을 고른다."""
+    projects = [
+        ProjectInfo("coast", "한결연구원", "연안관측망 자동기록 운영", None, None),
+        ProjectInfo("inland", "한결연구원", "내륙관측망 자동기록 운영", None, None),
+    ]
+    question = f"{agency}연안관측망 계약 참여 자격 추가 증빙 인정 범위 원본 사본 제출"
+
+    assert find_project_ids(question, projects) == ["coast"]
+
+
+@pytest.mark.parametrize("agency", ["", "한결연구원 "])
+def test_same_opening_word_does_not_select_unlisted_project(agency):
+    """시작 단어만 같고 목록에 없는 사업을 물으면 고르지 않는다."""
+    projects = [ProjectInfo("coast", "한결연구원", "연안관측망 자동기록 운영", None, None)]
+    question = f"{agency}연안관측망 해저 소음 교정 드론 복원 사업 예산"
+
+    assert find_project_ids(question, projects) == []
+
+
+def test_particle_rang_is_removed(projects):
+    """ "예산이랑"처럼 붙은 조사 "이랑"도 떼고 찾는다."""
+    question = "운행정보기록 자동분석시스템 예산이랑 계약 방법"
+
+    assert find_project_ids(question, projects) == ["rail-operation.hwp"]
