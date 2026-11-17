@@ -35,11 +35,20 @@ CANDIDATE_K = 20  # 리랭커에게 넘길 후보 조각 수 (문서마다)
 MODEL_NAME = "BAAI/bge-reranker-v2-m3"  # 한국어를 지원하는 리랭커
 
 
+def pick_device() -> str:
+    """계산 장치를 고른다. NVIDIA GPU(cuda) → Mac GPU(mps) → CPU 순서로 있는 것을 쓴다."""
+    if torch.cuda.is_available():
+        return "cuda"  # VM의 NVIDIA GPU
+    if torch.backends.mps.is_available():
+        return "mps"  # Mac GPU
+    return "cpu"
+
+
 def load_reranker() -> CrossEncoder:
-    """리랭커 모델을 연다. Mac GPU(MPS)가 있으면 GPU + float16, 없으면 CPU로 계산한다."""
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    """리랭커 모델을 연다. GPU가 있으면 GPU + float16, 없으면 CPU로 계산한다."""
+    device = pick_device()
     reranker = CrossEncoder(MODEL_NAME, max_length=512, device=device)
-    if device == "mps":
+    if device != "cpu":
         reranker.model.half()  # 숫자를 절반 크기(float16)로 계산해서 더 빠르게
     print(f"리랭커 계산 장치: {device}")
     return reranker
