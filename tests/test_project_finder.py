@@ -4,6 +4,23 @@ from bidmate.retrieval.project_finder import find_project_ids
 from bidmate.schemas import ProjectInfo
 
 
+@pytest.mark.parametrize("agency", ["", "한결연구원 "])
+def test_title_evidence_survives_content_details(agency):
+    projects = [
+        ProjectInfo("coast", "한결연구원", "연안관측망 자동기록 운영", None, None),
+        ProjectInfo("inland", "한결연구원", "내륙관측망 자동기록 운영", None, None),
+    ]
+    question = f"{agency}연안관측망 계약 참여 자격 추가 증빙 인정 범위 원본 사본 제출"
+    assert find_project_ids(question, projects) == ["coast"]
+
+
+@pytest.mark.parametrize("agency", ["", "한결연구원 "])
+def test_same_opening_word_does_not_select_unlisted_business(agency):
+    projects = [ProjectInfo("coast", "한결연구원", "연안관측망 자동기록 운영", None, None)]
+    question = f"{agency}연안관측망 해저 소음 교정 드론 복원 사업 예산"
+    assert find_project_ids(question, projects) == []
+
+
 @pytest.fixture
 def projects() -> list[ProjectInfo]:
     return [

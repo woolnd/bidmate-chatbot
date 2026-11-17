@@ -163,6 +163,10 @@ FIELD_EXCLUSION = re.compile(
     r"(?<![가-힣a-z0-9])(?:부가세|부가가치세|vat|세금|예산|마감일|사업비|제출기한)"
     r"(?:은|는|이|가|을|를)?\s*(?:말고|제외하고|빼고)(?![가-힣a-z0-9])"
 )
+QUESTION_FIELD = re.compile(
+    r"(?:계약|기간|마감|마감일|사업비|예산|요구사항|일정|자격|제출|제출기한|제출서류)"
+    r"(?:은|는|이|가|을|를|의)?"
+)
 PROJECT_YEAR = re.compile(
     r"(?<![가-힣a-z0-9])(20\d{2})(?:\s*년(?:도)?)?(?=(?:의|은|는|에)?(?![가-힣a-z0-9]))"
 )
@@ -479,7 +483,7 @@ def find_project_ids(
     기관명만 식별된 질문은 해당 기관의 전체 후보를 반환한다.
     특정 사업을 물었는데 일치하는 후보가 없으면 빈 목록을 반환한다.
     """
-    return _find_project_ids(question, projects)
+    return _find_project_ids(question, projects, recover_exact_title_word=True)
 
 
 def _find_project_ids(
@@ -488,6 +492,7 @@ def _find_project_ids(
     *,
     allow_agency_pool: bool = True,
     inherited_agencies: list[str] | None = None,
+    recover_exact_title_word: bool = False,
 ) -> list[str]:
     """문서 ID를 고른다. 추가 사업을 찾을 때는 기관 전체를 고르지 않는다."""
     question = FIELD_EXCLUSION.sub(" ", _normalize(question))
@@ -750,6 +755,9 @@ def _find_project_ids(
     full_title_terms_matched = len(project_query_tokens) > 1 and any(
         matches == project_query_tokens for matches in matches_by_project
     )
+    required_coverage = 0.75
+    if matched_agencies:
+        required_coverage = 0.0 if multiple_terms_covered else 0.5
     candidates = []
 
     for project, project_matches in zip(search_projects, matches_by_project, strict=True):
@@ -772,9 +780,6 @@ def _find_project_ids(
             for token in project_matches
         )
         enough_project_evidence = len(project_matches) >= 2 or distinctive_single_match
-        # 여러 사업명을 함께 물으면 문서마다 한 단어가 맞을 수 있다.
-        coverage_floor = 0.0 if matched_agencies and multiple_terms_covered else 0.5
-        required_coverage = min(0.5, coverage_floor) if matched_agencies else 0.75
         if not enough_project_evidence or project_coverage < required_coverage:
             continue
 
@@ -789,6 +794,24 @@ def _find_project_ids(
         score = project_coverage * 0.85 + agency_bonus
         candidates.append((project.project_id, score))
 
+    if not candidates and recover_exact_title_word and not exclusion and not separators:
+        leading_term, following_word = next(
+            (
+                (term, following)
+                for word, following in zip(ordered, ordered[1:])
+                for term in _tokenize(word)
+                if term in project_query_tokens and term not in ACTION_WORDS
+            ),
+            ("", ""),
+        )
+        if (
+            len(leading_term) >= 4
+            and match_counts[leading_term] == 1
+            and QUESTION_FIELD.fullmatch(following_word)
+        ):
+            for project, terms in zip(search_projects, search_tokens, strict=True):
+                if leading_term in terms:
+                    return [project.project_id]
     if not candidates:
         return []
 
