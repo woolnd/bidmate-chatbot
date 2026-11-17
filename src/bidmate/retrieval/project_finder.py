@@ -197,17 +197,6 @@ def _tokenize(text: str) -> set[str]:
     for original_token in raw_tokens:
         token = original_token
 
-        # 연도는 대부분의 사업에서 반복되므로 식별 단어에서 제외한다.
-        if re.fullmatch(r"20\d{2}년?", token):
-            continue
-
-        if re.fullmatch(
-            r"(?:얼마|언제|예산|마감|마감일|사업비|기간|일정|돈)"
-            r"(?:은|는|이|가|을|를|까지)?(?:좀|야|임|지|냐|인가|인지|인가요|이야|이에요|예요|요)?",
-            token,
-        ):
-            continue
-
         # 질문에 붙은 조사 제거
         for particle in PARTICLES:
             if token.endswith(particle) and len(token) > len(particle) + 1:
