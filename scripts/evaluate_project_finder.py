@@ -55,11 +55,11 @@ def load_projects(csv_path: Path) -> list[ProjectInfo]:
             raise ValueError(f"CSV 필수 컬럼이 없습니다: {sorted(missing_columns)}")
 
         for row_number, row in enumerate(reader, start=2):
-            project_id = (row.get("파일명") or "").strip()
+            project_id = row.get("파일명") or ""
             agency_name = (row.get("발주 기관") or "").strip()
             project_name = (row.get("사업명") or "").strip()
 
-            if not project_id or not agency_name or not project_name:
+            if not project_id.strip() or not agency_name or not project_name:
                 print(f"[경고] {row_number}행 필수값 누락: project_id={project_id!r}")
                 continue
 

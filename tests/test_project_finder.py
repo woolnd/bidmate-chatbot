@@ -175,3 +175,23 @@ def test_agency_wide_queries_and_unknown_projects():
         "국민연금공단 ERP 구축",
     ):
         assert find_project_ids(question, projects) == []
+
+
+# ---------- 두 사업 나눠 찾기 ----------
+
+
+def test_two_projects_joined_by_wa_are_found_separately(projects):
+    """ "A와 B 사업의 기간은 각각" 꼴이면 두 사업을 모두 고른다."""
+    question = "예약발매시스템과 운행정보기록 자동분석시스템 사업의 기간은 각각 어떻게 되는가?"
+
+    assert find_project_ids(question, projects) == [
+        "rail-reservation.hwp",
+        "rail-operation.hwp",
+    ]
+
+
+def test_split_falls_back_when_one_part_is_not_a_project(projects):
+    """나눈 한쪽이 사업이 아니면 나눠 찾기를 쓰지 않고 원래 방식으로 찾는다."""
+    question = "모바일오피스 예산과 기간은?"
+
+    assert find_project_ids(question, projects) == ["rail-mobile.hwp"]
