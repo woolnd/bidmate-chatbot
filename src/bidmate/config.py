@@ -25,6 +25,9 @@ load_dotenv()  # .env의 OPENAI_API_KEY 등을 읽는다
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_FOLDER = PROJECT_ROOT / "data" / "raw"  # 원본 RFP 파일 (Git에 안 올라간다)
 PROJECT_LIST_PATH = RAW_FOLDER / "data_list.csv"  # 목록표
+FEEDBACK_LOG_FOLDER = (
+    PROJECT_ROOT / "data" / "logs" / "feedback"
+)  # 좋아요/별로예요 기록 (Git에 안 올라간다)
 
 # 조각 자르기
 CHUNK_SIZE = 1000  # 조각 하나의 글자 수

@@ -8,6 +8,7 @@ API 약속은 index.html 맨 위 주석과 아래 pydantic 모델이 같다. 한
     POST /api/login       비밀번호 → 로그인 쿠키
     GET  /api/projects    사업 목록 (사이드바·추천 질문)
     POST /api/chat        질문 → 네 단계(run_chatbot) → 답변·출처·조각·다음 질문
+    POST /api/feedback    좋아요/별로예요 → 로그 파일 (data/logs/feedback)
 
 비밀번호(.env의 APP_PASSWORD)가 비어 있으면 로그인 없이 열린다 (개발 모드).
 
@@ -20,7 +21,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
@@ -29,6 +30,7 @@ from pydantic import BaseModel, StringConstraints
 from bidmate.config import APP_PASSWORD, PROJECT_LIST_PATH, USE_RERANKER
 from bidmate.pipeline.graph import get_projects, run_chatbot
 from bidmate.retrieval.reranker import get_reranker
+from bidmate.service.chat_logger import log_feedback
 
 INDEX_PATH = Path(__file__).parent / "static" / "index.html"
 SESSION_COOKIE_NAME = "bidmate_session"
@@ -81,6 +83,14 @@ class ChunkView(BaseModel):
     project_name: str
     text: str
     score: float  # Chroma 거리. 작을수록 질문과 가깝다
+
+
+class FeedbackRequest(BaseModel):
+    """답변 아래 좋아요/별로예요 버튼을 누르면 화면이 보내는 것."""
+
+    question: Annotated[str, StringConstraints(max_length=1000)]
+    answer: Annotated[str, StringConstraints(max_length=5000)]
+    rating: Literal["up", "down"]
 
 
 class ChatResponse(BaseModel):
@@ -206,3 +216,10 @@ def chat(chat_request: ChatRequest) -> ChatResponse:
         seconds=round(seconds, 2),
         next_questions=answer_result.next_questions,
     )
+
+
+@app.post("/api/feedback", dependencies=[Depends(require_login)])
+def feedback(feedback_request: FeedbackRequest) -> dict:
+    """좋아요/별로예요를 로그에 남긴다. 별로예요 받은 질문은 나중에 평가셋에 추가한다."""
+    log_feedback(feedback_request.question, feedback_request.answer, feedback_request.rating)
+    return {"ok": True}
