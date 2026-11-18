@@ -62,8 +62,8 @@ class RewriteResult(BaseModel):
         "설명이나 따옴표를 붙이지 않는다."
     )
     route: Literal["rfp", "chat"] = Field(
-        description="질문이 공공기관 RFP·입찰·사업에 관한 것이면 rfp. "
-        "인사, 감사, 챗봇 소개처럼 RFP와 관계없으면 chat."
+        description="인사, 감사, 맞장구·짧은 대답, 챗봇 소개 질문, 공공사업과 관계없는 잡담이면 "
+        "chat. 그 밖에 사업·시스템·기술·용어·계약에 관한 질문은 기관명이 없어도 rfp."
     )
 
 
