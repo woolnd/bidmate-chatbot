@@ -101,3 +101,61 @@ def test_chat_route_skips_search_and_answers_greeting(monkeypatch):
     assert state["answer_result"].is_rfp_question is False
     assert state["answer_result"].next_questions == []
     assert state["chunks"] == []
+
+
+# ── 4단계 뒤 다시 찾기 갈림길 (#52) ──
+
+NO_EVIDENCE = AnswerResult(
+    answer="찾은 문서에 없습니다.",
+    source_project_names=[],
+    has_evidence=False,
+    is_rfp_question=True,
+    next_questions=[],
+)
+
+
+def run_with_answers(monkeypatch, answers, chunk_count=100):
+    """가짜 단계로 그래프를 돌린다. 4단계는 answers를 차례로 답한다. 검색에 쓴 k 목록도 돌려준다.
+
+    chunk_count: 문서에 있는 조각 수. 검색은 min(k, chunk_count)개를 돌려준다
+    """
+    searched_k = []
+    answer_queue = list(answers)
+
+    def fake_search(question, project_ids, k):
+        searched_k.append(k)
+        return [FAKE_CHUNK] * min(k, chunk_count)
+
+    monkeypatch.setattr(
+        graph,
+        "rewrite_question",
+        lambda question, chat_history: RewriteResult(rewritten_question=question, route="rfp"),
+    )
+    monkeypatch.setattr(graph, "get_projects", lambda: [])
+    monkeypatch.setattr(graph, "find_project_ids", lambda question, projects: ["a.hwp"])
+    monkeypatch.setattr(graph, "search_chunks", fake_search)
+    monkeypatch.setattr(graph, "generate_answer", lambda *args: answer_queue.pop(0))
+    return run_chatbot("예산은?", []), searched_k
+
+
+def test_no_evidence_retries_once_with_more_chunks(monkeypatch):
+    # 근거 없음 → RETRY_TOP_K개로 한 번만 다시 찾는다. 두 번째도 근거 없음이어도 끝난다
+    state, searched_k = run_with_answers(monkeypatch, [NO_EVIDENCE, NO_EVIDENCE])
+    assert searched_k == [graph.TOP_K, graph.RETRY_TOP_K]
+    assert len(state["chunks"]) == graph.RETRY_TOP_K
+
+
+def test_retry_answer_replaces_first_answer(monkeypatch):
+    state, _ = run_with_answers(monkeypatch, [NO_EVIDENCE, FAKE_ANSWER])
+    assert state["answer_result"] == FAKE_ANSWER
+
+
+def test_evidence_found_does_not_retry(monkeypatch):
+    _, searched_k = run_with_answers(monkeypatch, [FAKE_ANSWER])
+    assert searched_k == [graph.TOP_K]
+
+
+def test_few_chunks_does_not_retry(monkeypatch):
+    # 처음부터 TOP_K개를 못 채웠으면 그 문서에 조각이 더 없으니 다시 찾지 않는다
+    _, searched_k = run_with_answers(monkeypatch, [NO_EVIDENCE], chunk_count=2)
+    assert searched_k == [graph.TOP_K]
