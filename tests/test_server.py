@@ -4,6 +4,7 @@ TestClient로 서버를 띄우지 않고 요청을 보낸다.
 run_chatbot은 가짜로 바꿔서 "서버가 결과를 화면 약속(ChatResponse) 모양으로 바꾸는지"만 본다.
 """
 
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -11,6 +12,7 @@ from langchain_core.documents import Document
 
 from app import server
 from bidmate.schemas import AnswerResult
+from bidmate.service import chat_logger
 
 TEST_PASSWORD = "test-pass"
 FAKE_STATE = {
@@ -29,6 +31,7 @@ FAKE_STATE = {
         source_project_names=["이러닝"],
         has_evidence=True,
         is_rfp_question=True,
+        next_questions=["이러닝 사업 마감일은?"],
     ),
 }
 
@@ -74,6 +77,28 @@ def test_chat_returns_answer_in_promised_shape(monkeypatch):
     assert result["chunks"][0]["chunk_id"] == "가나다공단_이러닝.hwp-0001"
     assert len(result["chunks"][0]["text"]) == server.CHUNK_PREVIEW_LENGTH  # 원문은 앞부분만
     assert result["chunks"][0]["score"] == 0.25
+    assert result["next_questions"] == ["이러닝 사업 마감일은?"]
+
+
+def test_feedback_is_logged(monkeypatch, tmp_path):
+    # 좋아요/별로예요가 그날 파일에 한 줄씩 쌓이고, up/down 말고는 422
+    monkeypatch.setattr(server, "APP_PASSWORD", "")
+    monkeypatch.setattr(
+        server, "log_feedback", lambda *args: chat_logger.log_feedback(*args, folder=tmp_path)
+    )
+    client = TestClient(server.app)
+
+    for rating in ("up", "down"):
+        response = client.post(
+            "/api/feedback", json={"question": "예산은?", "answer": "1억입니다.", "rating": rating}
+        )
+        assert response.status_code == 200
+    bad = client.post("/api/feedback", json={"question": "q", "answer": "a", "rating": "meh"})
+    assert bad.status_code == 422
+
+    lines = next(tmp_path.glob("*.jsonl")).read_text(encoding="utf-8").splitlines()
+    assert [json.loads(line)["rating"] for line in lines] == ["up", "down"]
+    assert json.loads(lines[0])["question"] == "예산은?"
 
 
 def test_chat_rejects_empty_question(monkeypatch):

@@ -12,7 +12,11 @@ from bidmate.schemas import AnswerResult
 
 FAKE_CHUNK = (Document(page_content="[가나다공단 / 이러닝] 예산 1억", metadata={}), 0.1)
 FAKE_ANSWER = AnswerResult(
-    answer="1억입니다.", source_project_names=["이러닝"], has_evidence=True, is_rfp_question=True
+    answer="1억입니다.",
+    source_project_names=["이러닝"],
+    has_evidence=True,
+    is_rfp_question=True,
+    next_questions=[],
 )
 
 

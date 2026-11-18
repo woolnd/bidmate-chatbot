@@ -6,7 +6,7 @@
 정할 약속:
     ProjectInfo     data_list.csv 한 줄 (project_id = 원본 파일 이름, 기관명, 사업명, 예산, 마감일)
     LoadedDocument  원본 파일에서 뽑은 글자 (project_id, 본문)
-    AnswerResult    답변 (answer, source_project_names, has_evidence)
+    AnswerResult    답변 (answer, source_project_names, has_evidence, next_questions)
     ChatState       4단계가 주고받는 상태 (질문, 대화 기록, 단계별 결과)
 
 조각과 검색 결과는 따로 만들지 않고 LangChain Document를 그대로 쓴다.
@@ -68,6 +68,11 @@ class AnswerResult(BaseModel):
     is_rfp_question: bool = Field(
         description="질문이 공공기관 RFP·입찰에 관한 것이면 true. "
         "인사나 챗봇 소개처럼 RFP와 관계없는 질문이면 false. 화면이 근거 안내를 숨길 때 쓴다."
+    )
+    next_questions: list[str] = Field(
+        description="이 답 다음에 물어볼 만한 짧은 질문 2개. 기관명이나 사업명을 넣어 "
+        "혼자 읽어도 뜻이 통하게 쓴다. RFP 질문이 아니면 빈 목록. "
+        "화면이 추천 질문 버튼으로 보여 준다."
     )
 
 
