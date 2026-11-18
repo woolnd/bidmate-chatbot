@@ -37,6 +37,14 @@ CHROMA_FOLDER = PROJECT_ROOT / "data" / "chroma"  # Chroma 저장 폴더 (Git에
 COLLECTION_NAME = f"rfp_chunks_{CHUNK_SIZE}"
 TOP_K = 5  # 찾아올 조각 수 (2주차에 3·5·10 비교)
 
+# 3단계 리랭커 (후보를 넉넉히 찾고 질문과 한 쌍씩 다시 채점해서 k개를 고른다)
+# .env의 USE_RERANKER=true일 때만 켠다. GPU가 있는 VM은 켜고, 로컬 Mac은 끈다 (Mac은 질문당 약 13초)
+# 켜기 전에 선택 패키지를 설치한다: uv sync --extra rerank
+USE_RERANKER = os.getenv("USE_RERANKER", "").strip().lower() == "true"
+RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"  # 한국어를 지원하는 리랭커 (약 2.3GB)
+RERANK_CANDIDATE_K = 20  # 리랭커에게 넘길 후보 조각 수 (문서마다)
+RERANKER_MAX_LENGTH = 512  # 질문 + 조각을 이 토큰 수까지만 읽는다 (길수록 느리다)
+
 # 생성 (1·4단계)
 ANSWER_MODEL_NAME = "gpt-5-mini"  # 1단계 질문 다듬기와 4단계 답변이 같이 쓰는 모델
 MAX_HISTORY_TURNS = 5  # AI에게 넘길 대화 기록 수 (최근 질문·답변 5번)

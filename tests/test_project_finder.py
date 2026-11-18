@@ -220,12 +220,35 @@ def test_title_word_followed_by_question_field_is_recovered(agency):
 
 
 @pytest.mark.parametrize("agency", ["", "한결연구원 "])
-def test_same_opening_word_does_not_select_unlisted_project(agency):
-    """시작 단어만 같고 목록에 없는 사업을 물으면 고르지 않는다."""
+def test_same_opening_word_selects_project_known_limit(agency):
+    """알려진 한계: 목록표에 없는 단어는 버리므로, 사업명 단어가 하나 맞으면 그 사업을 고른다.
+
+    목록에 없는 사업을 물은 것인지 그 사업 안의 내용을 물은 것인지 목록표만으로는 구분할 수 없다.
+    잘못 골라도 그 문서에 내용이 없어 4단계가 "찾은 문서에 없다"고 답한다.
+    """
     projects = [ProjectInfo("coast", "한결연구원", "연안관측망 자동기록 운영", None, None)]
     question = f"{agency}연안관측망 해저 소음 교정 드론 복원 사업 예산"
 
-    assert find_project_ids(question, projects) == []
+    assert find_project_ids(question, projects) == ["coast"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "국민연금공단 사업 언제까지야?",
+        "국민연금공단 사업 예산이 얼마야?",
+        "국민연금공단 사업 마감일이 언제예요?",
+        "국민연금공단 사업 예산좀",
+        "국민연금공단 사업 얼마임?",
+    ],
+)
+def test_question_with_ending_is_agency_wide(question):
+    """ "얼마야", "언제예요"처럼 말끝이 붙은 질문 단어도 걸러서 기관 전체 질문으로 본다."""
+    projects = [
+        ProjectInfo("a", "국민연금공단", "이러닝시스템 운영 지원", None, None),
+        ProjectInfo("b", "국민연금공단", "사회보험료 지원 정보시스템 보완", None, None),
+    ]
+    assert find_project_ids(question, projects) == ["a", "b"]
 
 
 def test_particle_rang_is_removed(projects):

@@ -320,6 +320,12 @@ def _get_agency_matches(
     return matched
 
 
+# "얼마야", "예산이", "언제예요", "기간인가요"처럼 말끝이 붙은 질문 단어
+QUESTION_ENDING = re.compile(
+    r"(?:얼마|언제|예산|마감|마감일|사업비|기간|일정|돈)"
+    r"(?:은|는|이|가|을|를|까지)?(?:좀|야|임|지|냐|인가|인지|인가요|이야|이에요|예요|요)?"
+)
+
 GENERIC_QUERY_TERMS = {
     "사업",
     "사업들",
@@ -345,7 +351,11 @@ def _is_agency_wide_query(project_query_tokens: set[str]) -> bool:
 
 def _is_non_content_word(token: str) -> bool:
     """사업명 내용이 아닌, 질문 표현/일반 단어인지 본다 (불용어 대체 보조 장치)."""
-    return bool(QUESTION_FIELD.fullmatch(token)) or token in GENERIC_QUERY_TERMS
+    return (
+        bool(QUESTION_FIELD.fullmatch(token))
+        or token in GENERIC_QUERY_TERMS
+        or bool(QUESTION_ENDING.fullmatch(token))
+    )
 
 
 def _find_project_ids(

@@ -10,6 +10,7 @@
     project_id 목록이 있으면 metadata로 걸러서 고른 문서 안에서만 찾는다.
     빈 목록이면 전체에서 찾는다.
     문서가 2개 이상이면 문서마다 나눠서 찾고 합친다 (한 문서가 k자리를 다 차지하지 않게).
+    리랭커를 켜면(.env USE_RERANKER=true) 후보를 넉넉히 찾고 리랭커로 다시 골라 k개를 남긴다.
     k(찾아올 조각 수)는 config.py에서 가져온다. 2주차에 3/5/10을 점수로 비교한다.
 
 받는 것: (저장) Document 목록 / (찾기) 다듬은 질문, project_id 목록
@@ -33,7 +34,14 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 
-from bidmate.config import CHROMA_FOLDER, COLLECTION_NAME, EMBEDDING_MODEL_NAME
+from bidmate.config import (
+    CHROMA_FOLDER,
+    COLLECTION_NAME,
+    EMBEDDING_MODEL_NAME,
+    RERANK_CANDIDATE_K,
+    USE_RERANKER,
+)
+from bidmate.retrieval.reranker import Reranker, get_reranker, rerank
 from bidmate.schemas import CHUNK_METADATA_KEYS
 
 # 한 번에 저장할 조각 수. Chroma는 한 번에 5,461개까지만 받고,
@@ -165,14 +173,17 @@ def search_chunks(
     project_ids: list[str],
     k: int,
     vector_store: Chroma | None = None,
+    reranker: Reranker | None = None,
 ) -> list[tuple[Document, float]]:
     """고른 문서 안에서 질문과 뜻이 비슷한 조각 k개를 찾는다. 빈 목록이면 전체에서 찾는다.
 
     받는 것: question (1단계가 다듬은 질문), project_ids (2단계가 고른 문서. 못 고르면 빈 목록),
              k (찾아올 조각 수, 보통 config.TOP_K),
-             vector_store (테스트에서 가짜 임베딩으로 연 저장소를 넣는다. 비우면 get_vector_store())
+             vector_store (테스트에서 가짜 임베딩 저장소를 넣는다. 비우면 get_vector_store()),
+             reranker (테스트에서 가짜 리랭커를 넣는다. 비우면 USE_RERANKER 설정을 따른다)
     넘기는 것: [(Document, 점수), ...] 최대 k개. 점수가 작은(더 비슷한) 조각이 앞에 온다
                점수는 L2 거리라서 확률이 아니다. 순서를 비교할 때만 쓴다
+               리랭커를 쓰면 점수(거리)는 그대로 두고 순서만 리랭커 순서로 바뀐다
     """
     # 1. 받은 값 확인. 잘못된 값은 Chroma까지 가기 전에 알기 쉬운 오류로 멈춘다
     if not question.strip():
@@ -187,14 +198,21 @@ def search_chunks(
     # 3. 거르기 조건 만들기: project_ids가 있으면 그 문서 조각만, 빈 목록이면 None(전체)
     project_filter = make_project_filter(project_ids)
 
-    # 4. 질문을 임베딩해서 가장 가까운 조각 k개 찾기 (거리가 작은 순서로 온다)
-    #    문서가 0~1개면 한 번에 찾고, 2개 이상이면 문서마다 나눠 찾아서 합친다
-    if len(project_ids) <= 1:
+    # 4. 리랭커를 켰으면 모델을 가져온다 (처음 한 번만 불러오고 그다음부터는 기억해 둔 모델)
+    if reranker is None and USE_RERANKER:
+        reranker = get_reranker()
+
+    # 5. 질문을 임베딩해서 가장 가까운 조각 k개 찾기 (거리가 작은 순서로 온다)
+    #    리랭커가 있으면 후보를 넉넉히 찾고 다시 골라 k개를 남긴다
+    #    없으면 문서가 0~1개일 때 한 번에 찾고, 2개 이상이면 문서마다 나눠 찾아서 합친다
+    if reranker is not None:
+        results = search_and_rerank(question, project_ids, k, vector_store, reranker)
+    elif len(project_ids) <= 1:
         results = vector_store.similarity_search_with_score(question, k=k, filter=project_filter)
     else:
         results = search_each_project(question, project_ids, k, vector_store)
 
-    # 5. 0개면 이유를 경고로 남긴다. 4단계는 0개면 "찾은 문서에 없습니다"라고만 답해서
+    # 6. 0개면 이유를 경고로 남긴다. 4단계는 0개면 "찾은 문서에 없습니다"라고만 답해서
     #    여기서 이유를 남기지 않으면 저장 문제인지, project_id 문제인지 알 수 없다
     if len(results) == 0:
         warn_empty_result(vector_store, project_ids)
@@ -241,6 +259,42 @@ def search_each_project(
 
     # 문서마다 따로 찾아서 순서가 섞여 있으니, 점수(거리)가 작은 순서로 다시 줄 세운다
     return sorted(results, key=lambda result: result[1])
+
+
+def search_and_rerank(
+    question: str,
+    project_ids: list[str],
+    k: int,
+    vector_store: Chroma,
+    reranker: Reranker,
+) -> list[tuple[Document, float]]:
+    """후보를 넉넉히 찾고 리랭커로 다시 골라 k개를 남긴다.
+
+    받는 것: 질문, project_id 목록, 전체 조각 수 k, 저장소, 리랭커
+    넘기는 것: [(Document, 점수), ...] 최대 k개
+        문서가 0~1개면 후보 RERANK_CANDIDATE_K개 중에서 k개를 고른다
+        문서가 2개 이상이면 문서마다 후보를 찾고, 나눠 검색과 같은 개수(split_k)만큼 고른다
+        (리랭커가 한 문서 조각만 고르지 않게)
+
+    질문 임베딩은 한 번만 만들어서 모든 문서에 다시 쓴다 (OpenAI 호출 1번).
+    """
+    question_vector = vector_store.embeddings.embed_query(question)
+
+    # 문서가 0~1개면 한 묶음, 2개 이상이면 문서마다 한 묶음
+    if len(project_ids) <= 1:
+        groups = [project_ids]
+    else:
+        groups = [[project_id] for project_id in project_ids]
+
+    results: list[tuple[Document, float]] = []
+    for group, keep in zip(groups, split_k(k, len(groups)), strict=True):
+        if keep == 0:
+            continue
+        candidates = vector_store.similarity_search_by_vector_with_relevance_scores(
+            question_vector, k=RERANK_CANDIDATE_K, filter=make_project_filter(group)
+        )
+        results.extend(rerank(question, candidates, keep, reranker))
+    return results
 
 
 def warn_empty_result(vector_store: Chroma, project_ids: list[str]) -> None:
