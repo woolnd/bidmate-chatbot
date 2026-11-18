@@ -46,13 +46,21 @@
       radial-gradient(at 50% 100%, rgba(254, 243, 235, 0.5) 0px, transparent 50%);
   }
   .glass-card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(16px); }
-  .answer-text { white-space: pre-wrap; }
+  .answer-text p { margin: 0 0 0.5rem; }
+  .answer-text p:last-child { margin-bottom: 0; }
+  .answer-text ul { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0 0.5rem; }
+  .answer-text ol { list-style: decimal; padding-left: 1.25rem; margin: 0.25rem 0 0.5rem; }
+  .answer-text li { margin: 0.15rem 0; }
+  .answer-text strong { font-weight: 700; color: #4C3FD1; }
   .dot-loading span { animation: blink 1.2s infinite both; }
   .dot-loading span:nth-child(2) { animation-delay: .2s; }
   .dot-loading span:nth-child(3) { animation-delay: .4s; }
   @keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
 </style>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- 답변 마크다운(- 목록, **굵게**)을 HTML로 바꾸고, 원문에 섞인 위험한 HTML은 걸러 낸다 -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -250,6 +258,14 @@
     return String(text ?? '').replace(/[&<>"'`=\/]/g, (character) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '/': '&#x2F;', '`': '&#x60;', '=': '&#x3D;',
     })[character]);
+  }
+
+  // 답변 마크다운 → 안전한 HTML. CDN을 못 불러오면 줄바꿈만 살린 글자로 보여 준다
+  // **굵게**는 미리 <strong>으로 바꾼다. 마크다운 규칙은 "**값)**입니다"처럼 조사가 붙으면 굵게를 안 닫는다
+  function renderAnswer(text) {
+    if (!window.marked || !window.DOMPurify) return escapeHtml(text).replace(/\n/g, '<br>');
+    const bolded = String(text ?? '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    return DOMPurify.sanitize(marked.parse(bolded, { breaks: true }));
   }
 
   function timeLabel() {
@@ -526,7 +542,7 @@
         ${botAvatarHtml()}
         <div class="flex flex-col gap-2 w-full max-w-2xl">
           <div class="bg-white rounded-3xl rounded-tl-md p-6 sm:p-7 border border-[#EFE8F7] shadow-pastel-card flex flex-col gap-4 text-slate-800">
-            <p id="${answerId}" class="answer-text text-[15px] leading-relaxed text-slate-800 font-medium m-0">${escapeHtml(result.answer)}</p>
+            <div id="${answerId}" class="answer-text text-[15px] leading-relaxed text-slate-800 font-medium m-0">${renderAnswer(result.answer)}</div>
             ${noEvidence}
             ${sources ? `<div class="flex flex-wrap items-center gap-2 pt-0.5">${sources}</div>` : ''}
             ${evidence}
