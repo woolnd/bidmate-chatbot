@@ -1,7 +1,7 @@
 """Search-B: 질문에 적합한 사업 문서를 선별한다.
 
 기관명과 사업명을 분리해 비교하고,
-전체 사업 목록에서 계산한 단어 중요도를 활용해 후보를 평가한다.
+목록표 사업명에 실제로 나오는 단어와 문서빈도를 활용해 후보를 평가한다.
 
 CSV 로딩이나 문서 검색은 담당하지 않으며,
 선택한 문서의 원본 project_id만 반환한다.
@@ -9,7 +9,6 @@ CSV 로딩이나 문서 검색은 담당하지 않으며,
 
 from __future__ import annotations
 
-import math
 import re
 import unicodedata
 from collections import Counter
@@ -17,66 +16,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from bidmate.schemas import ProjectInfo
-
-
-# 질문의 의도나 공고 형식에 가까워 사업 식별에 도움이 적은 단어
-STOP_WORDS = {
-    "사업",
-    "사업비",
-    "기간",
-    "예산",
-    "마감일",
-    "계약",
-    "방식",
-    "시스템",
-    "용역",
-    "운영",
-    "구축",
-    "및",
-    "등",
-    "관련",
-    "대한",
-    "통한",
-    "위한",
-    "긴급",
-    "재공고",
-    "입찰",
-    "입찰공고",
-    "협상",
-    "협상에",
-    "의한",
-    "제안서",
-    "제출",
-    "안내",
-    "공고",
-    "주",
-    "사",
-}
-
-STOP_WORDS.update({"얼마", "마감", "언제까지", "돈", "개발", "개량", "기능개선"})
-
-STOP_WORDS.update(
-    {
-        "일정",
-        "현황",
-        "목록",
-        "조회",
-        "확인",
-        "알려",
-        "언제",
-        "어디",
-        "관련",
-        "찾아",
-        "검색",
-        "입찰",
-        "어떻게",
-        "어떤가요",
-        "되나요",
-        "되는가",
-        "되는지",
-        "됩니까",
-    }
-)
 
 
 # 의미가 명확한 표현만 별칭으로 연결한다.
@@ -88,7 +27,6 @@ ALIASES = {
 }
 
 ACTION_WORDS = {"개량", "고도화", "개발", "구축", "운영", "기능개선"}
-STOP_WORDS.difference_update(ACTION_WORDS)
 
 # 현재 목록의 기관 표기를 확인한 약칭이다. 여러 기관을 뜻하면 모두 남긴다.
 AGENCY_ALIASES = {
@@ -191,22 +129,11 @@ def _tokenize(text: str) -> set[str]:
         normalized,
     )
 
-    raw_tokens = re.findall(r"[가-힣a-z0-9]+", normalized)
+    raw_tokens = re.findall(r"[가-힣]+|[a-z]+|[0-9]+", normalized)
     tokens: set[str] = set()
 
     for original_token in raw_tokens:
         token = original_token
-
-        # 연도는 대부분의 사업에서 반복되므로 식별 단어에서 제외한다.
-        if re.fullmatch(r"20\d{2}년?", token):
-            continue
-
-        if re.fullmatch(
-            r"(?:얼마|언제|예산|마감|마감일|사업비|기간|일정|돈)"
-            r"(?:은|는|이|가|을|를|까지)?(?:좀|야|임|지|냐|인가|인지|인가요|이야|이에요|예요|요)?",
-            token,
-        ):
-            continue
 
         # 질문에 붙은 조사 제거
         for particle in PARTICLES:
@@ -214,7 +141,7 @@ def _tokenize(text: str) -> set[str]:
                 token = token[: -len(particle)]
                 break
 
-        if not token or token in STOP_WORDS:
+        if not token:
             continue
 
         token = ALIASES.get(token, token)
@@ -223,44 +150,50 @@ def _tokenize(text: str) -> set[str]:
     return tokens
 
 
-def _calculate_idf(
-    projects: list[ProjectInfo],
-) -> tuple[dict[str, float], int]:
-    """사업명에 등장하는 단어의 역문서빈도(IDF)를 계산한다."""
+COMMON_WORD_DOC_THRESHOLD = 10
 
+
+def _title_document_frequency(projects: list[ProjectInfo]) -> Counter[str]:
+    """사업명에 등장하는 단어가 몇 개 사업명에 나오는지 센다."""
     document_frequency: Counter[str] = Counter()
-
     for project in projects:
-        # 한 사업 안에서 같은 단어가 반복되어도 한 번만 센다.
         document_frequency.update(_tokenize(project.project_name))
-
-    total_documents = len(projects)
-
-    idf = {
-        token: math.log((total_documents + 1) / (frequency + 1)) + 1
-        for token, frequency in document_frequency.items()
-    }
-
-    return idf, total_documents
+    return document_frequency
 
 
-def _weighted_coverage(
+def _filter_informative_tokens(
     query_tokens: set[str],
+    title_document_frequency: Counter[str],
+    common_threshold: int = COMMON_WORD_DOC_THRESHOLD,
+) -> set[str]:
+    """목록표 단어로 걸러내고, 너무 흔한 단어는 추가로 뺀다 (팀원 11/16 제안).
+
+    1단계: 목록표 사업명 단어와 겹치지 않는 질문 단어는 버린다 (불용어 목록 대체).
+    2단계: 그 중에서도 사업명 common_threshold개 이상에 나오는 단어는 식별력이 없어 버린다.
+    """
+    informative = set()
+    for token in query_tokens:
+        in_vocab = any(
+            token in title_token or title_token in token for title_token in title_document_frequency
+        )
+        if not in_vocab:
+            continue
+        if title_document_frequency.get(token, 0) >= common_threshold:
+            continue
+        informative.add(token)
+    return informative
+
+
+def _simple_coverage(
     matched_tokens: set[str],
-    idf: dict[str, float],
+    informative_tokens: set[str],
+    fallback_query_tokens: set[str],
 ) -> float:
-    """질문 단어 중 일치한 단어의 중요도 가중 비율을 계산한다."""
-
-    if not query_tokens:
+    """정보성 있는 단어 기준으로 일치 비율을 계산한다 (IDF 대체)."""
+    base = informative_tokens if informative_tokens else fallback_query_tokens
+    if not base:
         return 0.0
-
-    total_weight = sum(idf.get(token, 1.0) for token in query_tokens)
-    matched_weight = sum(idf.get(token, 1.0) for token in matched_tokens)
-
-    if total_weight == 0:
-        return 0.0
-
-    return matched_weight / total_weight
+    return len(matched_tokens & base) / len(base)
 
 
 def _match_project_tokens(
@@ -387,23 +320,42 @@ def _get_agency_matches(
     return matched
 
 
+# "얼마야", "예산이", "언제예요", "기간인가요"처럼 말끝이 붙은 질문 단어
+QUESTION_ENDING = re.compile(
+    r"(?:얼마|언제|예산|마감|마감일|사업비|기간|일정|돈)"
+    r"(?:은|는|이|가|을|를|까지)?(?:좀|야|임|지|냐|인가|인지|인가요|이야|이에요|예요|요)?"
+)
+
+GENERIC_QUERY_TERMS = {
+    "사업",
+    "사업들",
+    "사업목록",
+    "사업정보",
+    "전체",
+    "모든",
+    "목록",
+    "리스트",
+    "요구사항",
+    "관련",
+    "알려줘",
+    "보여줘",
+    "입찰",
+    "입찰공고",
+}
+
+
 def _is_agency_wide_query(project_query_tokens: set[str]) -> bool:
     """기관 전체 검색을 허용하는 일반 질문인지 판단한다."""
-    generic_terms = {
-        "사업",
-        "사업들",
-        "사업목록",
-        "사업정보",
-        "전체",
-        "모든",
-        "목록",
-        "리스트",
-        "요구사항",
-        "관련",
-        "알려줘",
-        "보여줘",
-    }
-    return not project_query_tokens or project_query_tokens <= generic_terms
+    return not project_query_tokens or project_query_tokens <= GENERIC_QUERY_TERMS
+
+
+def _is_non_content_word(token: str) -> bool:
+    """사업명 내용이 아닌, 질문 표현/일반 단어인지 본다 (불용어 대체 보조 장치)."""
+    return (
+        bool(QUESTION_FIELD.fullmatch(token))
+        or token in GENERIC_QUERY_TERMS
+        or bool(QUESTION_ENDING.fullmatch(token))
+    )
 
 
 def _find_project_ids(
@@ -438,11 +390,6 @@ def _find_project_ids(
     if not question_tokens:
         return []
 
-    idf, total_documents = _calculate_idf(projects)
-
-    if total_documents == 0:
-        return []
-
     matched_agencies = _get_agency_matches(question, projects)
 
     if matched_agencies:
@@ -471,11 +418,20 @@ def _find_project_ids(
                 agency_tokens.update(_tokenize(alias))
         project_query_tokens = question_tokens - agency_tokens
 
+        # 불용어 목록 대신, project_query_tokens가 만들어지는 이 지점 한 곳에서만
+        # "마감일"/"예산" 같은 질문 표현을 걷어낸다. 아래 로직(기관 전체 질문
+        # 판단, 합성어 만들기, 매칭)은 이미 걸러진 토큰을 그대로 쓴다.
+        project_query_tokens -= {
+            token for token in project_query_tokens if _is_non_content_word(token)
+        }
+
         if _is_agency_wide_query(project_query_tokens):
             return list(dict.fromkeys(project.project_id for project in search_projects))
     else:
         search_projects = projects
-        project_query_tokens = question_tokens
+        project_query_tokens = question_tokens - {
+            token for token in question_tokens if _is_non_content_word(token)
+        }
 
     # 전체 사업명이 공백 차이만 있는 경우에 한해 원문 근거를 보존한다.
     compact_question = re.sub(r"\s+", "", _normalize(question))
@@ -518,6 +474,8 @@ def _find_project_ids(
     ordered = re.findall(r"[가-힣a-z0-9]+", _normalize(question))
     for left, right in zip(ordered, ordered[1:]):
         compound = left + right
+        # project_query_tokens가 만들어질 때 이미 질문 표현 단어가 걸러져 있어서,
+        # "사업"/"기간" 같은 단어는 여기서 따로 막지 않아도 애초에 없다.
         if left in project_query_tokens and right in project_query_tokens and len(compound) >= 4:
             if any(compound in _normalize(p.project_name) for p in search_projects):
                 project_query_tokens -= {left, right}
@@ -556,6 +514,9 @@ def _find_project_ids(
     multiple_terms_covered = len(project_query_tokens) >= 2 and all_matches == project_query_tokens
     candidates = []
 
+    title_document_frequency = _title_document_frequency(search_projects)
+    informative_tokens = _filter_informative_tokens(project_query_tokens, title_document_frequency)
+
     for project in search_projects:
         project_tokens = _tokenize(project.project_name)
         project_matches = _match_project_tokens(
@@ -568,10 +529,10 @@ def _find_project_ids(
         if project_query_tokens - ACTION_WORDS and not project_matches - ACTION_WORDS:
             continue
 
-        project_coverage = _weighted_coverage(
-            project_query_tokens,
+        project_coverage = _simple_coverage(
             project_matches,
-            idf,
+            informative_tokens,
+            project_query_tokens,
         )
 
         distinctive_single_match = any(
