@@ -6,6 +6,7 @@
 정할 약속:
     ProjectInfo     data_list.csv 한 줄 (project_id = 원본 파일 이름, 기관명, 사업명, 예산, 마감일)
     LoadedDocument  원본 파일에서 뽑은 글자 (project_id, 본문)
+    RewriteResult   1단계 결과 (rewritten_question, route)
     AnswerResult    답변 (answer, source_project_names, has_evidence, next_questions)
     ChatState       4단계가 주고받는 상태 (질문, 대화 기록, 단계별 결과)
 
@@ -15,7 +16,7 @@
 """
 
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
@@ -48,6 +49,22 @@ class LoadedDocument:
 
     project_id: str  # ProjectInfo.project_id와 같은 값
     text: str  # 정리된 본문 전체
+
+
+class RewriteResult(BaseModel):
+    """1단계 질문 다듬기 결과. AI가 이 양식을 채워서 돌려준다(구조화된 출력). graph.py가 쓴다.
+
+    route를 보고 그래프가 길을 고른다: rfp면 2·3·4단계로, chat이면 인사 답변으로 바로 간다.
+    """
+
+    rewritten_question: str = Field(
+        description="새 질문을 혼자 읽어도 뜻이 통하게 다듬은 질문 한 줄. "
+        "설명이나 따옴표를 붙이지 않는다."
+    )
+    route: Literal["rfp", "chat"] = Field(
+        description="질문이 공공기관 RFP·입찰·사업에 관한 것이면 rfp. "
+        "인사, 감사, 챗봇 소개처럼 RFP와 관계없으면 chat."
+    )
 
 
 class AnswerResult(BaseModel):
@@ -87,6 +104,7 @@ class ChatState(TypedDict, total=False):
     question: str  # 사용자가 쓴 질문 그대로
     chat_history: ChatHistory  # 화면이 모아 둔 대화 기록
     rewritten_question: str  # 1단계가 채운다
+    route: str  # 1단계가 채운다 ("rfp" 또는 "chat"). 그래프가 이 값으로 길을 고른다
     project_ids: list[str]  # 2단계가 채운다 (못 고르면 [])
     chunks: list[tuple[Document, float]]  # 3단계가 채운다 (Document, 점수) 목록
     answer_result: AnswerResult  # 4단계가 채운다

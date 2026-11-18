@@ -23,13 +23,14 @@ from bidmate.schemas import ChatHistory
 # 예시는 실제 RFP 이름이 아니라 지어낸 기관명으로 쓴다 (이 파일은 Git에 올라간다).
 # 짧게 시작하고, 평가에서 틀린 경우가 나올 때만 규칙을 하나씩 더한다.
 REWRITE_SYSTEM_PROMPT = """너는 공공기관 RFP 문서 검색을 돕는 질문 다듬기 도우미다.
-대화 기록과 새 질문을 보고, 새 질문을 혼자 읽어도 뜻이 통하는 질문으로 바꾼다.
+대화 기록과 새 질문을 보고, 새 질문을 혼자 읽어도 뜻이 통하는 질문으로 바꾸고 질문 종류를 고른다.
 
 규칙:
 - 새 질문이 앞 대화를 봐야 뜻이 통하면, 앞 대화에 나온 기관명·사업명을 넣어 바꾼다.
 - 새 질문이 이미 혼자 뜻이 통하거나 다른 사업으로 주제가 바뀌었으면 그대로 둔다.
 - 질문에 답하지 않는다. 대화 기록에 없는 기관명·사업명을 지어내지 않는다.
 - 다듬은 질문 한 줄만 쓴다. 설명이나 따옴표를 붙이지 않는다.
+- 질문 종류: RFP·입찰·사업에 관한 질문이면 rfp, 인사·감사·챗봇 소개 같은 잡담이면 chat.
 
 예시 1)
 대화 기록:
@@ -37,7 +38,7 @@ REWRITE_SYSTEM_PROMPT = """너는 공공기관 RFP 문서 검색을 돕는 질�
 답변: 가나다공단 통합 이러닝 플랫폼 구축 사업의 요구사항은 강의 수강, 진도 관리 …
 
 새 질문: 그럼 예산은?
-출력: 가나다공단 통합 이러닝 플랫폼 구축 사업 예산은?
+출력: 가나다공단 통합 이러닝 플랫폼 구축 사업 예산은? / rfp
 
 예시 2)
 대화 기록:
@@ -45,7 +46,14 @@ REWRITE_SYSTEM_PROMPT = """너는 공공기관 RFP 문서 검색을 돕는 질�
 답변: 가나다공단 통합 이러닝 플랫폼 구축 사업은 직원 교육을 하나로 통합하는 사업으로 …
 
 새 질문: 라마대학교 학사 시스템 사업 마감일은?
-출력: 라마대학교 학사 시스템 사업 마감일은?"""
+출력: 라마대학교 학사 시스템 사업 마감일은? / rfp
+
+예시 3)
+대화 기록:
+(없음)
+
+새 질문: 안녕? 너는 뭘 할 수 있어?
+출력: 안녕? 너는 뭘 할 수 있어? / chat"""
 
 
 def build_rewrite_messages(question: str, recent_history: ChatHistory) -> list[BaseMessage]:
@@ -64,8 +72,8 @@ def build_rewrite_messages(question: str, recent_history: ChatHistory) -> list[B
         history_lines.append(f"질문: {previous_question}")
         history_lines.append(f"답변: {answer_preview}")
 
-    # 2. 줄들을 한 덩어리 글로 잇는다
-    history_text = "\n".join(history_lines)
+    # 2. 줄들을 한 덩어리 글로 잇는다. 첫 질문이라 기록이 없으면 "(없음)" (예시 3과 같은 모양)
+    history_text = "\n".join(history_lines) or "(없음)"
 
     # 3. 사람 메시지 글 만들기: 시스템 프롬프트 예시와 같은 모양 ("대화 기록:" → "새 질문:")
     human_message_text = "대화 기록:\n" + history_text + "\n\n새 질문: " + question

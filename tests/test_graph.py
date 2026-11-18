@@ -8,7 +8,7 @@ from langchain_core.documents import Document
 
 from bidmate.pipeline import graph
 from bidmate.pipeline.graph import run_chatbot
-from bidmate.schemas import AnswerResult
+from bidmate.schemas import AnswerResult, RewriteResult
 
 FAKE_CHUNK = (Document(page_content="[가나다공단 / 이러닝] 예산 1억", metadata={}), 0.1)
 FAKE_ANSWER = AnswerResult(
@@ -26,7 +26,7 @@ def test_four_steps_run_in_order_and_pass_values(monkeypatch):
 
     def fake_rewrite(question, chat_history):
         called_steps.append(("rewrite", question, chat_history))
-        return "가나다공단 이러닝 예산은?"
+        return RewriteResult(rewritten_question="가나다공단 이러닝 예산은?", route="rfp")
 
     def fake_find(question, projects):
         called_steps.append(("find", question))
@@ -57,14 +57,19 @@ def test_four_steps_run_in_order_and_pass_values(monkeypatch):
     ]
     # 끝난 state에 모든 칸이 차 있다 (로그·채점용)
     assert state["rewritten_question"] == "가나다공단 이러닝 예산은?"
+    assert state["route"] == "rfp"
     assert state["project_ids"] == ["가나다공단_이러닝.hwp"]
     assert state["chunks"] == [FAKE_CHUNK]
     assert state["answer_result"] == FAKE_ANSWER
 
 
 def test_empty_search_gives_no_evidence_answer(monkeypatch):
-    # 2·3단계가 빈 목록이면 4단계가 AI를 부르지 않고 "찾은 문서에 없습니다"
-    # (대화 기록이 없으면 1단계도 AI를 부르지 않는다. 4단계는 진짜 함수 그대로)
+    # 2·3단계가 빈 목록이면 4단계가 AI를 부르지 않고 "찾은 문서에 없습니다" (4단계는 진짜 함수)
+    monkeypatch.setattr(
+        graph,
+        "rewrite_question",
+        lambda question, chat_history: RewriteResult(rewritten_question=question, route="rfp"),
+    )
     monkeypatch.setattr(graph, "get_projects", lambda: [])
     monkeypatch.setattr(graph, "find_project_ids", lambda question, projects: [])
     monkeypatch.setattr(graph, "search_chunks", lambda question, project_ids, k: [])
@@ -74,3 +79,25 @@ def test_empty_search_gives_no_evidence_answer(monkeypatch):
     assert state["rewritten_question"] == "예산은?"
     assert state["answer_result"].answer == "찾은 문서에 없습니다."
     assert state["answer_result"].has_evidence is False
+
+
+def test_chat_route_skips_search_and_answers_greeting(monkeypatch):
+    # 1단계가 chat을 고르면 2·3·4단계를 건너뛰고 고정 인사 답변을 준다 (AI 호출 없음)
+    called_steps = []
+    monkeypatch.setattr(
+        graph,
+        "rewrite_question",
+        lambda question, chat_history: RewriteResult(rewritten_question=question, route="chat"),
+    )
+    monkeypatch.setattr(graph, "find_project_ids", lambda *args: called_steps.append("find"))
+    monkeypatch.setattr(graph, "search_chunks", lambda *args: called_steps.append("search"))
+    monkeypatch.setattr(graph, "generate_answer", lambda *args: called_steps.append("answer"))
+
+    state = run_chatbot("안녕?", [])
+
+    assert called_steps == []
+    assert state["route"] == "chat"
+    assert state["answer_result"].answer == graph.CHAT_ANSWER
+    assert state["answer_result"].is_rfp_question is False
+    assert state["answer_result"].next_questions == []
+    assert state["chunks"] == []
