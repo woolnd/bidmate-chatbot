@@ -42,7 +42,7 @@ def _cell_text_keep_paragraphs(paragraphs: list) -> str:
 
         def collect(node) -> None:
             """문단의 노드를 재귀적으로 순회하며 텍스트·수식·그림 표시를 수집한다.
-               결과는 바깥 함수의 parts에 누적한다.
+            결과는 바깥 함수의 parts에 누적한다.
             """
             if node.tag == _hwp5.HWPTAG_PARA_TEXT:
                 parts.append(_hwp5.decode_para_text(node.payload))
@@ -184,7 +184,7 @@ def _render_document(file_path: Path, records: list[dict] | None) -> str:
 
     def origins_on(row_index: int):
         """지정 행에서 새로 시작한 비어 있지 않은 원본 셀을 중복 없이 반환한다.
-           병합 셀의 연장 부분은 제외한다.
+        병합 셀의 연장 부분은 제외한다.
         """
         found = []
         seen = set()
@@ -395,7 +395,7 @@ def _render_document(file_path: Path, records: list[dict] | None) -> str:
 
     def plain_parallel_header(start_row: int) -> bool:
         """병합 없는 표의 첫 행이 실제 열 헤더인지 추정한다.
-           첫 행 값이 아래 행에 반복되면 일반 데이터 행으로 간주해 헤더 승격을 방지한다.
+        첫 행 값이 아래 행에 반복되면 일반 데이터 행으로 간주해 헤더 승격을 방지한다.
         """
         # 병합도 식별자도 없는 표에서 열 헤더를 판별한다.
         if not peer_header_row(start_row):
