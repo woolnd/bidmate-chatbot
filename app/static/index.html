@@ -377,10 +377,13 @@
 
   function renderProjects(projects) {
     const select = document.getElementById('projectSelect');
-    for (const project of projects) {
+    // "기관명 사업명"을 가나다순으로 보여 준다
+    const labels = projects.map((project) => `${project.agency_name} ${project.project_name}`);
+    labels.sort((left, right) => left.localeCompare(right, 'ko'));
+    for (const label of labels) {
       const option = document.createElement('option');
-      option.value = `${project.agency_name} ${project.project_name}`;
-      option.textContent = option.value;
+      option.value = label;
+      option.textContent = label;
       select.appendChild(option);
     }
     const count = projects.length;
