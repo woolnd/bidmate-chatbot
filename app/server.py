@@ -17,6 +17,8 @@ API 약속은 index.html 맨 위 주석과 아래 pydantic 모델이 같다. 한
 import hashlib
 import hmac
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -24,14 +26,28 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, StringConstraints
 
-from bidmate.config import APP_PASSWORD, PROJECT_LIST_PATH
+from bidmate.config import APP_PASSWORD, PROJECT_LIST_PATH, USE_RERANKER
 from bidmate.pipeline.graph import get_projects, run_chatbot
+from bidmate.retrieval.reranker import get_reranker
 
 INDEX_PATH = Path(__file__).parent / "static" / "index.html"
 SESSION_COOKIE_NAME = "bidmate_session"
 CHUNK_PREVIEW_LENGTH = 600  # 근거 원문 보기에 보여 줄 조각 글자 수
 
-app = FastAPI(title="BidMate RFP 챗봇")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """서버를 켤 때 한 번 실행한다. 리랭커를 켰으면(USE_RERANKER) 모델을 미리 불러 둔다.
+
+    모델이 약 2.3GB라 불러오는 데 몇 초가 걸린다.
+    미리 안 불러 두면 서버를 켜고 첫 질문이 그만큼 느려진다.
+    """
+    if USE_RERANKER:
+        get_reranker()
+    yield
+
+
+app = FastAPI(title="BidMate RFP 챗봇", lifespan=lifespan)
 
 
 # ── 주고받는 모양 (index.html의 API 약속과 같다) ──
