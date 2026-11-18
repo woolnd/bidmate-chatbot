@@ -81,6 +81,7 @@ def generate_answer(
             source_project_names=[],
             has_evidence=False,
             is_rfp_question=True,
+            next_questions=[],
         )
 
     # 2. 대화 기록은 최근 MAX_HISTORY_TURNS번(5번)만 넘긴다

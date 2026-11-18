@@ -7,7 +7,7 @@ API 약속은 index.html 맨 위 주석과 아래 pydantic 모델이 같다. 한
     GET  /api/health      서버 살아 있는지 (VM 배포 확인용)
     POST /api/login       비밀번호 → 로그인 쿠키
     GET  /api/projects    사업 목록 (사이드바·추천 질문)
-    POST /api/chat        질문 → 네 단계(run_chatbot) → 답변·출처·조각
+    POST /api/chat        질문 → 네 단계(run_chatbot) → 답변·출처·조각·다음 질문
 
 비밀번호(.env의 APP_PASSWORD)가 비어 있으면 로그인 없이 열린다 (개발 모드).
 
@@ -84,7 +84,7 @@ class ChunkView(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """화면이 받는 답. v0.2 칸(next_questions 등)은 아직 없다."""
+    """화면이 받는 답. v0.2 칸 중 diagnosis, similar_projects는 아직 없다."""
 
     answer: str
     source_project_names: list[str]
@@ -93,6 +93,7 @@ class ChatResponse(BaseModel):
     rewritten_question: str
     chunks: list[ChunkView]
     seconds: float
+    next_questions: list[str]  # 답 아래 추천 질문 버튼
 
 
 # ── 로그인 ──
@@ -203,4 +204,5 @@ def chat(chat_request: ChatRequest) -> ChatResponse:
         rewritten_question=state["rewritten_question"],
         chunks=chunk_views,
         seconds=round(seconds, 2),
+        next_questions=answer_result.next_questions,
     )

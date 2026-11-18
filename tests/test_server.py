@@ -29,6 +29,7 @@ FAKE_STATE = {
         source_project_names=["이러닝"],
         has_evidence=True,
         is_rfp_question=True,
+        next_questions=["이러닝 사업 마감일은?"],
     ),
 }
 
@@ -74,6 +75,7 @@ def test_chat_returns_answer_in_promised_shape(monkeypatch):
     assert result["chunks"][0]["chunk_id"] == "가나다공단_이러닝.hwp-0001"
     assert len(result["chunks"][0]["text"]) == server.CHUNK_PREVIEW_LENGTH  # 원문은 앞부분만
     assert result["chunks"][0]["score"] == 0.25
+    assert result["next_questions"] == ["이러닝 사업 마감일은?"]
 
 
 def test_chat_rejects_empty_question(monkeypatch):

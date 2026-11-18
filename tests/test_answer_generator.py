@@ -17,6 +17,7 @@ FAKE_RESULT = AnswerResult(
     source_project_names=["통합 이러닝 플랫폼 구축"],
     has_evidence=True,
     is_rfp_question=True,
+    next_questions=["가나다공단 이러닝 사업 마감일은?"],
 )
 
 
