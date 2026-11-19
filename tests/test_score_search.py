@@ -178,9 +178,12 @@ def make_chunk(project_id: str, text: str) -> tuple[Document, float]:
 
 
 def test_normalize_text() -> None:
-    """띄어쓰기와 쉼표를 지워서 표기만 다른 말을 같게 본다."""
+    """띄어쓰기·쉼표·표 칸 기호를 지워서 표기만 다른 말을 같게 본다."""
     assert normalize_text("986,945,000 원") == "986945000원"
     assert normalize_text("작 성 방 법") == "작성방법"
+    # 표 모양이 바뀌어도 같은 말로 본다
+    assert normalize_text("| 합 계 | | 29 |") == normalize_text("합계 29") == "합계29"
+    assert normalize_text("요구사항 수: 29") == "요구사항수29"
 
 
 def test_get_keywords_reads_keyword_column() -> None:
