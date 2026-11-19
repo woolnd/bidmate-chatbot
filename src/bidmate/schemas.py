@@ -6,7 +6,7 @@
 정할 약속:
     ProjectInfo     data_list.csv 한 줄 (project_id = 원본 파일 이름, 기관명, 사업명, 예산, 마감일)
     LoadedDocument  원본 파일에서 뽑은 글자 (project_id, 본문)
-    RewriteResult   1단계 결과 (rewritten_question, route)
+    RewriteResult   1단계 결과 (rewritten_question, route: rfp / chat / catalog)
     AnswerResult    답변 (answer, source_project_names, has_evidence, next_questions)
     ChatState       4단계가 주고받는 상태 (질문, 대화 기록, 단계별 결과)
 
@@ -54,16 +54,18 @@ class LoadedDocument:
 class RewriteResult(BaseModel):
     """1단계 질문 다듬기 결과. AI가 이 양식을 채워서 돌려준다(구조화된 출력). graph.py가 쓴다.
 
-    route를 보고 그래프가 길을 고른다: rfp면 2·3·4단계로, chat이면 인사 답변으로 바로 간다.
+    route를 보고 그래프가 길을 고른다: rfp면 2·3·4단계로, chat이면 인사 답변으로,
+    catalog면 2·3단계를 건너뛰고 목록표(data_list) 전체를 보고 답한다.
     """
 
     rewritten_question: str = Field(
         description="새 질문을 혼자 읽어도 뜻이 통하게 다듬은 질문 한 줄. "
         "설명이나 따옴표를 붙이지 않는다."
     )
-    route: Literal["rfp", "chat"] = Field(
+    route: Literal["rfp", "chat", "catalog"] = Field(
         description="인사, 감사, 맞장구·짧은 대답, 챗봇 소개 질문, 공공사업과 관계없는 잡담이면 "
-        "chat. 그 밖에 사업·시스템·기술·용어·계약에 관한 질문은 기관명이 없어도 rfp."
+        "chat. 조건에 맞는 사업을 모두 찾거나 여러 사업을 비교·순위로 묻는 질문이면 catalog. "
+        "그 밖에 사업·시스템·기술·용어·계약에 관한 질문은 기관명이 없어도 rfp."
     )
 
 
@@ -104,7 +106,7 @@ class ChatState(TypedDict, total=False):
     question: str  # 사용자가 쓴 질문 그대로
     chat_history: ChatHistory  # 화면이 모아 둔 대화 기록
     rewritten_question: str  # 1단계가 채운다
-    route: str  # 1단계가 채운다 ("rfp" 또는 "chat"). 그래프가 이 값으로 길을 고른다
+    route: str  # 1단계가 채운다 ("rfp", "chat", "catalog"). 그래프가 이 값으로 길을 고른다
     project_ids: list[str]  # 2단계가 채운다 (못 고르면 [])
     chunks: list[tuple[Document, float]]  # 3단계가 채운다 (Document, 점수) 목록
     answer_result: AnswerResult  # 4단계가 채운다
