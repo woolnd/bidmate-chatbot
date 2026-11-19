@@ -24,6 +24,9 @@
     >>> results = search_chunks("예산은?", ["파일이름.hwp"], TOP_K)        # 고른 문서 안에서만
     >>> for document, score in results: print(score, document.metadata["chunk_id"])   # 엔터 두 번
     저장(save_chunks)은 따로 부르지 말고 scripts/build_index.py로 한다 (임베딩 비용).
+
+    리랭커를 켜면(.env USE_RERANKER=true) 후보를 넉넉히 찾고 리랭커로 다시 골라 k개를 남긴다.
+    BM25도 켜면(.env USE_BM25=true) 문서마다 키워드 검색 후보를 더해서 리랭커에게 넘긴다.
 """
 
 import logging
@@ -35,12 +38,15 @@ from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 
 from bidmate.config import (
+    BM25_CANDIDATE_K,
     CHROMA_FOLDER,
     COLLECTION_NAME,
     EMBEDDING_MODEL_NAME,
     RERANK_CANDIDATE_K,
+    USE_BM25,
     USE_RERANKER,
 )
+from bidmate.retrieval.bm25 import add_bm25_candidates
 from bidmate.retrieval.reranker import Reranker, get_reranker, rerank
 from bidmate.schemas import CHUNK_METADATA_KEYS
 
@@ -184,6 +190,7 @@ def search_chunks(
     넘기는 것: [(Document, 점수), ...] 최대 k개. 점수가 작은(더 비슷한) 조각이 앞에 온다
                점수는 L2 거리라서 확률이 아니다. 순서를 비교할 때만 쓴다
                리랭커를 쓰면 점수(거리)는 그대로 두고 순서만 리랭커 순서로 바뀐다
+               BM25는 리랭커를 켰을 때만 쓴다 (점수 단위가 달라서 리랭커가 순서를 매긴다)
     """
     # 1. 받은 값 확인. 잘못된 값은 Chroma까지 가기 전에 알기 쉬운 오류로 멈춘다
     if not question.strip():
@@ -203,10 +210,11 @@ def search_chunks(
         reranker = get_reranker()
 
     # 5. 질문을 임베딩해서 가장 가까운 조각 k개 찾기 (거리가 작은 순서로 온다)
-    #    리랭커가 있으면 후보를 넉넉히 찾고 다시 골라 k개를 남긴다
+    #    리랭커가 있으면 후보를 넉넉히 찾고 다시 골라 k개를 남긴다 (BM25를 켜면 BM25 후보도 더함)
     #    없으면 문서가 0~1개일 때 한 번에 찾고, 2개 이상이면 문서마다 나눠 찾아서 합친다
     if reranker is not None:
-        results = search_and_rerank(question, project_ids, k, vector_store, reranker)
+        bm25_k = BM25_CANDIDATE_K if USE_BM25 else 0
+        results = search_and_rerank(question, project_ids, k, vector_store, reranker, bm25_k)
     elif len(project_ids) <= 1:
         results = vector_store.similarity_search_with_score(question, k=k, filter=project_filter)
     else:
@@ -267,14 +275,18 @@ def search_and_rerank(
     k: int,
     vector_store: Chroma,
     reranker: Reranker,
+    bm25_k: int = 0,
 ) -> list[tuple[Document, float]]:
     """후보를 넉넉히 찾고 리랭커로 다시 골라 k개를 남긴다.
 
-    받는 것: 질문, project_id 목록, 전체 조각 수 k, 저장소, 리랭커
+    받는 것: 질문, project_id 목록, 전체 조각 수 k, 저장소, 리랭커,
+             bm25_k (문서마다 더할 BM25 후보 수. 0이면 임베딩 후보만)
     넘기는 것: [(Document, 점수), ...] 최대 k개
         문서가 0~1개면 후보 RERANK_CANDIDATE_K개 중에서 k개를 고른다
         문서가 2개 이상이면 문서마다 후보를 찾고, 나눠 검색과 같은 개수(split_k)만큼 고른다
         (리랭커가 한 문서 조각만 고르지 않게)
+    BM25 후보는 문서가 정해졌을 때만 더한다. 문서를 못 골라 전체에서 찾을 때는 임베딩 후보만 쓴다
+    (조각 1만 개 전체로 BM25를 만들면 첫 질문이 너무 느려서).
 
     질문 임베딩은 한 번만 만들어서 모든 문서에 다시 쓴다 (OpenAI 호출 1번).
     """
@@ -293,6 +305,10 @@ def search_and_rerank(
         candidates = vector_store.similarity_search_by_vector_with_relevance_scores(
             question_vector, k=RERANK_CANDIDATE_K, filter=make_project_filter(group)
         )
+        if bm25_k > 0 and len(group) == 1:
+            candidates = add_bm25_candidates(
+                question, question_vector, candidates, group[0], bm25_k, vector_store
+            )
         results.extend(rerank(question, candidates, keep, reranker))
     return results
 

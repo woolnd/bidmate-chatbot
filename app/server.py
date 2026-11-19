@@ -27,8 +27,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, StringConstraints
 
-from bidmate.config import APP_PASSWORD, PROJECT_LIST_PATH, USE_RERANKER
+from bidmate.config import APP_PASSWORD, PROJECT_LIST_PATH, USE_BM25, USE_RERANKER
 from bidmate.pipeline.graph import get_projects, run_chatbot
+from bidmate.retrieval.bm25 import get_kiwi
 from bidmate.retrieval.reranker import get_reranker
 from bidmate.service.chat_logger import log_feedback
 
@@ -39,13 +40,16 @@ CHUNK_PREVIEW_LENGTH = 600  # 근거 원문 보기에 보여 줄 조각 글자 �
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """서버를 켤 때 한 번 실행한다. 리랭커를 켰으면(USE_RERANKER) 모델을 미리 불러 둔다.
+    """서버를 켤 때 한 번 실행한다. 리랭커·BM25를 켰으면 모델을 미리 불러 둔다.
 
-    모델이 약 2.3GB라 불러오는 데 몇 초가 걸린다.
+    리랭커 모델이 약 2.3GB라 불러오는 데 몇 초가 걸린다. 형태소 분석기도 1~2초 걸린다.
     미리 안 불러 두면 서버를 켜고 첫 질문이 그만큼 느려진다.
+    패키지가 없으면 서버를 켤 때 바로 알려 준다 (첫 질문에서 오류가 나는 것보다 낫다).
     """
     if USE_RERANKER:
         get_reranker()
+        if USE_BM25:
+            get_kiwi()
     yield
 
 
