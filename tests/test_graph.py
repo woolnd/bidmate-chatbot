@@ -159,3 +159,33 @@ def test_few_chunks_does_not_retry(monkeypatch):
     # 처음부터 TOP_K개를 못 채웠으면 그 문서에 조각이 더 없으니 다시 찾지 않는다
     _, searched_k = run_with_answers(monkeypatch, [NO_EVIDENCE], chunk_count=2)
     assert searched_k == [graph.TOP_K]
+
+
+# ── catalog 길 (#60) ──
+
+
+def test_catalog_route_skips_search_and_answers_with_catalog(monkeypatch):
+    # 1단계가 catalog를 고르면 2·3단계를 건너뛰고, 목록표 조각 1개로 4단계가 답한다
+    called_steps = []
+    catalog_document = Document(page_content="목록표", metadata={"project_name": "사업 목록표"})
+    monkeypatch.setattr(
+        graph,
+        "rewrite_question",
+        lambda question, chat_history: RewriteResult(rewritten_question=question, route="catalog"),
+    )
+    monkeypatch.setattr(graph, "find_project_ids", lambda *args: called_steps.append("find"))
+    monkeypatch.setattr(graph, "search_chunks", lambda *args: called_steps.append("search"))
+    monkeypatch.setattr(graph, "build_catalog_document", lambda: catalog_document)
+
+    def fake_answer(question, chunks, chat_history):
+        called_steps.append(("answer", question, chunks))
+        return FAKE_ANSWER
+
+    monkeypatch.setattr(graph, "generate_answer", fake_answer)
+
+    state = run_chatbot("예산이 가장 큰 사업은?", [])
+
+    assert called_steps == [("answer", "예산이 가장 큰 사업은?", [(catalog_document, 0.0)])]
+    assert state["route"] == "catalog"
+    assert state["project_ids"] == []
+    assert state["answer_result"] == FAKE_ANSWER
