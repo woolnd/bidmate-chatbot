@@ -39,17 +39,18 @@ if TYPE_CHECKING:
     # ProjectInfo, LoadedDocument의 칸은 schemas.py에 있다 (11/10 확정)
     from bidmate.schemas import LoadedDocument, ProjectInfo
 
-# 입찰 문서(RFP)의 특성(문단, 개조식, 마침표)을 고려한 고도화된 스플리터 설정
+# 빈 줄(문단) → 줄바꿈 → 마침표 순서로 끊을 자리를 찾는다 (#67)
+# 번호·기호(1. 가. □ - 등) 앞에서 먼저 끊는 구분자는 뺐다 (11/19 비교):
+#   300자 미만 짧은 조각이 약 3배로 늘었고, 문장 끝에서 끝나는 비율은 그대로였다
+# 특수 마침표(。)도 뺐다: 문서 100개에 한 번도 없다
 TEXT_SPLITTER = RecursiveCharacterTextSplitter(
     chunk_size=CHUNK_SIZE,
     chunk_overlap=CHUNK_OVERLAP,
     add_start_index=True,  # 표 머리줄 찾기(_find_table_header)가 조각 시작 위치를 쓴다
     separators=[
         r"\n\n+",  # 빈 줄 (문단 구분)
-        r"\n(?=[Ⅰ-Ⅹ0-9]+\.|[가-힣]\.|□|○|●|※|-)",  # 주요 조항 및 개조식 기호 앞 줄바꿈
         r"\n",  # 일반 줄바꿈
         r"(?<!\d)\.\s+",  # 숫자가 아닌 글자 뒤의 마침표+공백 (날짜/번호 보호)
-        r"。",  # 특수 마침표
         r"\s+",  # 띄어쓰기
         "",  # 글자 단위
     ],
