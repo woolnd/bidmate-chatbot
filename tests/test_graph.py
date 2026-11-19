@@ -8,7 +8,7 @@ from langchain_core.documents import Document
 
 from bidmate.pipeline import graph
 from bidmate.pipeline.graph import run_chatbot
-from bidmate.schemas import AnswerResult, RewriteResult
+from bidmate.schemas import AnswerResult, ProjectInfo, RewriteResult, SimilarProject
 
 FAKE_CHUNK = (Document(page_content="[가나다공단 / 이러닝] 예산 1억", metadata={}), 0.1)
 FAKE_ANSWER = AnswerResult(
@@ -189,3 +189,54 @@ def test_catalog_route_skips_search_and_answers_with_catalog(monkeypatch):
     assert state["route"] == "catalog"
     assert state["project_ids"] == []
     assert state["answer_result"] == FAKE_ANSWER
+
+
+# ── similar 길 (#64) ──
+
+
+def run_similar(monkeypatch, project_ids, similar):
+    """similar 질문으로 그래프를 돌린다. 2단계는 project_ids, 비슷한 사업은 similar를 돌려준다."""
+    projects = [
+        ProjectInfo("a.hwp", "가나다공단", "이러닝", None, None),
+        ProjectInfo("b.hwp", "라마대학교", "학사 시스템", None, None),
+    ]
+    called_steps = []
+    monkeypatch.setattr(
+        graph,
+        "rewrite_question",
+        lambda question, chat_history: RewriteResult(rewritten_question=question, route="similar"),
+    )
+    monkeypatch.setattr(graph, "get_projects", lambda: projects)
+    monkeypatch.setattr(graph, "find_project_ids", lambda question, projects: project_ids)
+    monkeypatch.setattr(graph, "search_chunks", lambda *args: called_steps.append("search"))
+    monkeypatch.setattr(graph, "generate_answer", lambda *args: called_steps.append("answer"))
+    monkeypatch.setattr(graph, "find_similar_projects", lambda project_id: similar)
+    state = run_chatbot("가나다공단 이러닝과 비슷한 사업은?", [])
+    assert called_steps == []  # 3·4단계(검색·AI 답변)를 부르지 않는다
+    return state
+
+
+def test_similar_route_lists_similar_projects(monkeypatch):
+    similar = [SimilarProject("b.hwp", "라마대학교", "학사 시스템", 0.52)]
+    state = run_similar(monkeypatch, ["a.hwp"], similar)
+    assert state["similar_projects"] == similar
+    assert "라마대학교 학사 시스템 (유사도 52%)" in state["answer_result"].answer
+    assert state["answer_result"].source_project_names == ["이러닝"]
+
+
+def test_similar_route_says_when_nothing_is_clearly_similar(monkeypatch):
+    similar = [SimilarProject("b.hwp", "라마대학교", "학사 시스템", 0.1)]
+    state = run_similar(monkeypatch, ["a.hwp"], similar)
+    assert "뚜렷하게 비슷한 사업은 없어요" in state["answer_result"].answer
+
+
+def test_similar_route_asks_which_project_when_several(monkeypatch):
+    state = run_similar(monkeypatch, ["a.hwp", "b.hwp"], [])
+    assert state["answer_result"].answer.startswith("어느 사업과 비슷한 사업을 찾을까요?")
+    assert "- 가나다공단 이러닝" in state["answer_result"].answer
+    assert len(state["answer_result"].next_questions) == 2
+
+
+def test_similar_route_asks_for_name_when_none(monkeypatch):
+    state = run_similar(monkeypatch, [], [])
+    assert "기관명과 사업명을 함께 알려 주세요" in state["answer_result"].answer
