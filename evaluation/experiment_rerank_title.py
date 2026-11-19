@@ -41,7 +41,7 @@ from bidmate.data.metadata import load_project_list
 from bidmate.retrieval.vector_store import get_vector_store, save_chunks, split_k
 
 NOTITLE_FOLDER = (
-    PROJECT_ROOT / "data" / "chroma_nottitle"
+    PROJECT_ROOT / "data" / "chroma_notitle"
 )  # 제목 뺀 실험용 저장소 (Git에 안 올라간다)
 WATCH_QUESTION_IDS = ("Q001", "Q012", "Q033")  # 따로 지캬볼 질문
 RESULT_FOLDER = score_search.RESULT_FOLDER  # data/evaluation
