@@ -150,7 +150,9 @@ def _tokenize(text: str) -> set[str]:
     return tokens
 
 
-COMMON_WORD_DOC_THRESHOLD = 10
+# 전체 사업 수의 이 비율 이상에 나오는 단어는 흔한 단어로 본다. 절대 개수(예: 10개)로
+# 고정하면 목록표가 커질 때마다 다시 맞춰야 하지만, 비율로 두면 그럴 필요가 없다.
+COMMON_WORD_DOC_RATIO = 0.10
 
 
 def _title_document_frequency(projects: list[ProjectInfo]) -> Counter[str]:
@@ -164,13 +166,15 @@ def _title_document_frequency(projects: list[ProjectInfo]) -> Counter[str]:
 def _filter_informative_tokens(
     query_tokens: set[str],
     title_document_frequency: Counter[str],
-    common_threshold: int = COMMON_WORD_DOC_THRESHOLD,
+    total_documents: int,
 ) -> set[str]:
     """목록표 단어로 걸러내고, 너무 흔한 단어는 추가로 뺀다 (팀원 11/16 제안).
 
     1단계: 목록표 사업명 단어와 겹치지 않는 질문 단어는 버린다 (불용어 목록 대체).
-    2단계: 그 중에서도 사업명 common_threshold개 이상에 나오는 단어는 식별력이 없어 버린다.
+    2단계: 그 중에서도 전체 사업의 COMMON_WORD_DOC_RATIO 이상에 나오는 단어는
+    식별력이 없어 버린다.
     """
+    common_threshold = max(2, round(total_documents * COMMON_WORD_DOC_RATIO))
     informative = set()
     for token in query_tokens:
         in_vocab = any(
@@ -515,7 +519,9 @@ def _find_project_ids(
     candidates = []
 
     title_document_frequency = _title_document_frequency(search_projects)
-    informative_tokens = _filter_informative_tokens(project_query_tokens, title_document_frequency)
+    informative_tokens = _filter_informative_tokens(
+        project_query_tokens, title_document_frequency, len(search_projects)
+    )
 
     for project in search_projects:
         project_tokens = _tokenize(project.project_name)
