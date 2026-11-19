@@ -41,20 +41,23 @@ if TYPE_CHECKING:
 
 # 입찰 문서(RFP)의 특성(문단, 개조식, 마침표)을 고려한 고도화된 스플리터 설정
 TEXT_SPLITTER = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200,
+    chunk_size=CHUNK_SIZE,
+    chunk_overlap=CHUNK_OVERLAP,
+    add_start_index=True,  # 표 머리줄 찾기(_find_table_header)가 조각 시작 위치를 쓴다
     separators=[
-        r"\n\n+",                               # 빈 줄 (문단 구분)
+        r"\n\n+",  # 빈 줄 (문단 구분)
         r"\n(?=[Ⅰ-Ⅹ0-9]+\.|[가-힣]\.|□|○|●|※|-)",  # 주요 조항 및 개조식 기호 앞 줄바꿈
-        r"\n",                                  # 일반 줄바꿈
-        r"(?<!\d)\.\s+",                        # 숫자가 아닌 글자 뒤의 마침표+공백 (날짜/번호 보호)
-        r"。",                                  # 특수 마침표
-        r"\s+",                                 # 띄어쓰기
-        "",                                     # 글자 단위
+        r"\n",  # 일반 줄바꿈
+        r"(?<!\d)\.\s+",  # 숫자가 아닌 글자 뒤의 마침표+공백 (날짜/번호 보호)
+        r"。",  # 특수 마침표
+        r"\s+",  # 띄어쓰기
+        "",  # 글자 단위
     ],
     is_separator_regex=True,
-    keep_separator="end",                       # 구분자를 앞 문장 끝에 붙여 잘림 방지
+    keep_separator="end",  # 구분자를 앞 문장 끝에 붙여 잘림 방지
 )
+
+
 def _make_metadata(project: ProjectInfo, chunk_id: str) -> dict[str, str]:
     """조각 번호와 사업 정보로 이름표 4칸을 만든다."""
     return {
