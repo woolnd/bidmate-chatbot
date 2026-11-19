@@ -108,7 +108,7 @@ data/                 # 원본·가공 데이터, Chroma 저장 폴더 (Git에 �
 
 ## 스택
 
-gpt-5-mini(답변 최대 800토큰, temperature 대신 `reasoning_effort`), text-embedding-3-small, Chroma,
+gpt-5-mini(답변 최대 2000토큰, temperature 대신 `reasoning_effort`), text-embedding-3-small, Chroma,
 LangChain + LangGraph, FastAPI 서버 + HTML 화면 + 비밀번호, GCP VM 1대(L4, 16GB). 시나리오 A는 Ollama 8B 이하,
 temperature를 낮게 고정해 답이 흔들리지 않게 한다(값은 `config.py`).
 바꾸려면 평가 점수로 근거를 보인다.

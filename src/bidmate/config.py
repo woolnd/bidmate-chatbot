@@ -6,7 +6,7 @@
 넣을 값 (기획서 기준 시작값):
     답변 모델          gpt-5-mini (시나리오 A는 Ollama 모델, 11/17부터 바꾸기 설정)
     임베딩 모델        text-embedding-3-small
-    답변 최대 길이     800토큰, reasoning_effort
+    답변 최대 길이     2000토큰, reasoning_effort
     조각 길이 / 겹침   1000자 / 200자 (2주차에 500·1000·1500 비교)
     k                  찾아올 조각 수 (2주차에 3·5·10 비교)
     대화 기록          최근 5번의 질문·답변
@@ -39,6 +39,7 @@ CHROMA_FOLDER = PROJECT_ROOT / "data" / "chroma"  # Chroma 저장 폴더 (Git에
 # 영어·숫자·. _ - 로 3글자 이상. 조각 크기를 바꾸면 이름도 바꿔서 옛 조각과 섞이지 않게 한다
 COLLECTION_NAME = f"rfp_chunks_{CHUNK_SIZE}"
 TOP_K = 5  # 찾아올 조각 수 (2주차에 3·5·10 비교)
+RETRY_TOP_K = 15  # 답에 근거가 없을 때 한 번 더 찾는 조각 수 (에이전트 다시 찾기)
 
 # 3단계 리랭커 (후보를 넉넉히 찾고 질문과 한 쌍씩 다시 채점해서 k개를 고른다)
 # .env의 USE_RERANKER=true일 때만 켠다. GPU가 있는 VM은 켜고, 로컬 Mac은 끈다 (Mac은 질문당 약 13초)
@@ -62,7 +63,7 @@ REWRITE_MAX_TOKENS = 300  # 다듬은 질문 한 줄이면 충분. 생각에 쓴
 
 # 4단계 답변 만들기
 ANSWER_REASONING_EFFORT = "low"  # 조각 여러 개에서 맞는 내용을 골라야 해서 minimal보다 한 단계 위
-ANSWER_MAX_TOKENS = 800  # 생각에 쓴 토큰도 포함된다. 답이 잘리면 늘린다
+ANSWER_MAX_TOKENS = 2000  # 생각에 쓴 토큰도 포함된다. 다음 질문·다시 찾기(조각 15개)로 늘림
 
 # 4단계 답변 모델 고르기 (시나리오 B: openai / 시나리오 A: ollama). .env에서 바꾼다
 # 1단계 질문 다듬기, 3단계 임베딩, 채점 AI는 이 설정과 상관없이 항상 OpenAI
