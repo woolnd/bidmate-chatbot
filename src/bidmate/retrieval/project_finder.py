@@ -499,17 +499,26 @@ def _find_project_ids(
                 project_query_tokens.remove(token)
                 project_query_tokens.update(corrections)
 
-    all_matches = (
-        set().union(
-            *(
-                _match_project_tokens(project_query_tokens, _tokenize(p.project_name))
-                for p in search_projects
-            )
-        )
+    per_project_matches = (
+        {
+            p.project_id: _match_project_tokens(project_query_tokens, _tokenize(p.project_name))
+            for p in search_projects
+        }
         if search_projects
-        else set()
+        else {}
     )
-    multiple_terms_covered = len(project_query_tokens) >= 2 and all_matches == project_query_tokens
+    all_matches = set().union(*per_project_matches.values()) if per_project_matches else set()
+    # 사업 하나가 이미 혼자서 질문 단어를 전부 덮고 있으면, 다른 사업의 일부 겹침 때문에
+    # "여러 사업을 같이 물었다"고 오인하지 않는다 (예: "클라우드 전환" 질문에서 한 사업이
+    # 전부를 이미 덮는데, 다른 사업이 "클라우드" 하나만 겹쳐서 같이 끼어드는 경우).
+    single_project_fully_covers = any(
+        matches == project_query_tokens for matches in per_project_matches.values()
+    )
+    multiple_terms_covered = (
+        len(project_query_tokens) >= 2
+        and all_matches == project_query_tokens
+        and not single_project_fully_covers
+    )
     candidates = []
 
     title_document_frequency = _title_document_frequency(search_projects)

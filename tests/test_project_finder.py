@@ -256,3 +256,16 @@ def test_particle_rang_is_removed(projects):
     question = "운행정보기록 자동분석시스템 예산이랑 계약 방법"
 
     assert find_project_ids(question, projects) == ["rail-operation.hwp"]
+
+
+def test_shared_word_does_not_pull_in_other_project_by_itself():
+    """공통 단어가 하나 겹친다고, 질문 단어를 전부 덮는 사업 말고 다른 사업까지 같이 고르지 않는다.
+
+    "클라우드 전환"을 물었는데 "클라우드 관제"까지 같이 골랐던 문제의 재현.
+    """
+    projects = [
+        ProjectInfo("migration", "새봄공단", "클라우드 전환 타당성 검토", None, None),
+        ProjectInfo("monitoring", "새봄공단", "클라우드 관제 통합 개선", None, None),
+    ]
+    assert find_project_ids("새봄공단 클라우드 전환 마감", projects) == ["migration"]
+    assert find_project_ids("새봄공단 클라우드 관제 기간", projects) == ["monitoring"]
