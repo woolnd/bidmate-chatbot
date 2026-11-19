@@ -39,9 +39,22 @@ if TYPE_CHECKING:
     # ProjectInfo, LoadedDocument의 칸은 schemas.py에 있다 (11/10 확정)
     from bidmate.schemas import LoadedDocument, ProjectInfo
 
-# 문단(\n\n) → 줄바꿈(\n) → 띄어쓰기 순서로 끊을 자리를 찾고, 없으면 글자 단위로 자른다
+# 입찰 문서(RFP)의 특성(문단, 개조식, 마침표)을 고려한 고도화된 스플리터 설정
 TEXT_SPLITTER = RecursiveCharacterTextSplitter(
-    chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP, add_start_index=True
+    chunk_size=CHUNK_SIZE,
+    chunk_overlap=CHUNK_OVERLAP,
+    add_start_index=True,  # 표 머리줄 찾기(_find_table_header)가 조각 시작 위치를 쓴다
+    separators=[
+        r"\n\n+",  # 빈 줄 (문단 구분)
+        r"\n(?=[Ⅰ-Ⅹ0-9]+\.|[가-힣]\.|□|○|●|※|-)",  # 주요 조항 및 개조식 기호 앞 줄바꿈
+        r"\n",  # 일반 줄바꿈
+        r"(?<!\d)\.\s+",  # 숫자가 아닌 글자 뒤의 마침표+공백 (날짜/번호 보호)
+        r"。",  # 특수 마침표
+        r"\s+",  # 띄어쓰기
+        "",  # 글자 단위
+    ],
+    is_separator_regex=True,
+    keep_separator="end",  # 구분자를 앞 문장 끝에 붙여 잘림 방지
 )
 
 
