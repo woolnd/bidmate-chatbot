@@ -41,6 +41,14 @@ COLLECTION_NAME = f"rfp_chunks_{CHUNK_SIZE}"
 TOP_K = 5  # 찾아올 조각 수 (2주차에 3·5·10 비교)
 RETRY_TOP_K = 15  # 답에 근거가 없을 때 한 번 더 찾는 조각 수 (에이전트 다시 찾기)
 
+# 비슷한 사업 찾기 (에이전트 similar 길, #64)
+# 유사도는 전체 평균을 뺀 평균 임베딩의 코사인 (0~1 사이)
+SIMILAR_MIN_SCORE = 0.3  # 이 점수 이상은 모두 보여 준다 (11/19 확인: 같은 종류 사업 0.3~0.5)
+SIMILAR_MAX_COUNT = 10  # 많아도 이만큼만
+SIMILAR_FALLBACK_COUNT = (
+    3  # 기준 이상이 하나도 없으면 상위 이만큼 + "뚜렷하게 비슷한 사업은 없어요"
+)
+
 # 3단계 리랭커 (후보를 넉넉히 찾고 질문과 한 쌍씩 다시 채점해서 k개를 고른다)
 # .env의 USE_RERANKER=true일 때만 켠다. GPU가 있는 VM은 켜고, 로컬 Mac은 끈다 (Mac은 질문당 약 13초)
 # 켜기 전에 선택 패키지를 설치한다: uv sync --extra rerank
