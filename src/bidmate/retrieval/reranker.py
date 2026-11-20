@@ -15,7 +15,7 @@
     돌려줄 때는 원래 (Document, 거리)를 그대로 두고 순서만 리랭커 점수로 바꾼다
     (화면·로그에서 점수는 거리라는 약속을 지키려고).
 
-1차 실험 결과 (evaluation/experiment_reranker.py, 내용 기준 Hit@5):
+1차 실험 결과 (11/17, 내용 기준 Hit@5. 지금 비교는 experiment_bm25.py --rerank):
     VM GPU   74.3% → 88.6%, 검색 시간 평균 0.23초 → 0.46초
 """
 
