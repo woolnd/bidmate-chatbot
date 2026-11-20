@@ -32,11 +32,11 @@ class FakeReranker:
 
 @pytest.fixture(autouse=True)
 def split_by_spaces(monkeypatch):
-    """단어 자르기를 띄어쓰기로 바꾸고, 테스트마다 BM25 검색기 기억을 비운다."""
+    """단어 자르기를 띄어쓰기로 바꾸고, 테스트마다 만들어 둔 BM25 검색기를 비운다."""
     monkeypatch.setattr(bm25_module, "tokenize", str.split)
-    bm25_module.get_project_bm25.cache_clear()
+    bm25_module.bm25_by_project_id.clear()
     yield
-    bm25_module.get_project_bm25.cache_clear()
+    bm25_module.bm25_by_project_id.clear()
 
 
 def make_saved_store(folder: Path):
@@ -121,3 +121,27 @@ def test_bm25_used_only_with_reranker_and_chosen_document(tmp_path, monkeypatch)
 
     search_chunks("수료증", [ELEARNING[0]], 1, vector_store, FakeReranker("수료증"))
     assert calls == [ELEARNING[0]]
+
+
+def test_bm25_built_once_per_document_across_questions(tmp_path, monkeypatch) -> None:
+    """질문마다 Chroma 객체가 새로 열려도, 같은 문서의 BM25 검색기는 한 번만 만든다."""
+    make_saved_store(tmp_path)
+    monkeypatch.setattr(vector_store_module, "USE_BM25", True)
+    build_count = 0
+    original_project_bm25 = bm25_module.ProjectBM25
+
+    class CountingProjectBM25(original_project_bm25):
+        def __init__(self, documents, tokenize) -> None:
+            nonlocal build_count
+            build_count += 1
+            super().__init__(documents, tokenize)
+
+    monkeypatch.setattr(bm25_module, "ProjectBM25", CountingProjectBM25)
+
+    for _ in range(2):  # 질문마다 search_chunks가 저장소를 새로 여는 것처럼 매번 새로 연다.
+        vector_store = get_vector_store(
+            DeterministicFakeEmbedding(size=FAKE_EMBEDDING_SIZE), tmp_path
+        )
+        search_chunks("수료증 발급", [ELEARNING[0]], 1, vector_store, FakeReranker("수료증"))
+
+    assert build_count == 1

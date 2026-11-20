@@ -70,20 +70,29 @@ class ProjectBM25:
         return [document for document, score in ranked[:k] if score > 0]
 
 
-@lru_cache(maxsize=None)
+# 만들어 둔 BM25 검색기 (project_id → 검색기). 서버가 켜져 있는 동안 문서마다 한 번만 만든다
+bm25_by_project_id: dict[str, ProjectBM25] = {}
+
+
 def get_project_bm25(vector_store: Chroma, project_id: str) -> ProjectBM25:
     """문서 하나의 BM25 검색기를 가져온다. 처음이면 Chroma에서 그 문서 조각을 모두 읽어 만든다.
 
-    @lru_cache: 문서마다 처음 한 번만 만들고 그다음부터는 기억해 둔 것을 쓴다.
-    그래서 문서마다 첫 질문만 조금(1~2초) 느리다.
+    기억해 두는 열쇠는 project_id 하나만 쓴다.
+    search_chunks는 질문마다 Chroma 객체를 새로 열어서, Chroma 객체까지 열쇠에 넣으면
+    같은 문서인데도 매번 새로 만들고 기억도 계속 쌓인다.
+    그래서 문서마다 첫 질문만 조금(1~2초) 느리고, 그다음부터는 기억해 둔 것을 쓴다.
     build_index.py로 조각을 다시 만들면 서버를 다시 켜야 새 조각으로 만든다.
     """
-    saved = vector_store.get(where={"project_id": project_id}, include=["documents", "metadatas"])
-    documents = [
-        Document(page_content=text, metadata=metadata)
-        for text, metadata in zip(saved["documents"], saved["metadatas"], strict=True)
-    ]
-    return ProjectBM25(documents, tokenize)
+    if project_id not in bm25_by_project_id:
+        saved = vector_store.get(
+            where={"project_id": project_id}, include=["documents", "metadatas"]
+        )
+        documents = [
+            Document(page_content=text, metadata=metadata)
+            for text, metadata in zip(saved["documents"], saved["metadatas"], strict=True)
+        ]
+        bm25_by_project_id[project_id] = ProjectBM25(documents, tokenize)
+    return bm25_by_project_id[project_id]
 
 
 def squared_distance(vector_a, vector_b) -> float:
