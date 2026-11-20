@@ -93,8 +93,17 @@ class FeedbackRequest(BaseModel):
     rating: Literal["up", "down"]
 
 
+class SimilarProjectView(BaseModel):
+    """화면 "이 사업과 비슷한 RFP" 카드 한 장. similarity는 0~1 (화면이 %로 보여 준다)."""
+
+    agency_name: str
+    project_name: str
+    similarity: float
+    note: str = ""
+
+
 class ChatResponse(BaseModel):
-    """화면이 받는 답. v0.2 칸 중 diagnosis, similar_projects는 아직 없다."""
+    """화면이 받는 답. v0.2 칸 중 diagnosis는 아직 없다."""
 
     answer: str
     source_project_names: list[str]
@@ -104,6 +113,7 @@ class ChatResponse(BaseModel):
     chunks: list[ChunkView]
     seconds: float
     next_questions: list[str]  # 답 아래 추천 질문 버튼
+    similar_projects: list[SimilarProjectView] = []  # similar 길일 때만 채운다
 
 
 # ── 로그인 ──
@@ -215,6 +225,14 @@ def chat(chat_request: ChatRequest) -> ChatResponse:
         chunks=chunk_views,
         seconds=round(seconds, 2),
         next_questions=answer_result.next_questions,
+        similar_projects=[
+            SimilarProjectView(
+                agency_name=project.agency_name,
+                project_name=project.project_name,
+                similarity=round(project.similarity, 3),
+            )
+            for project in state.get("similar_projects", [])
+        ],
     )
 
 
