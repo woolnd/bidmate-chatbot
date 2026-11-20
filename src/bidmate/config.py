@@ -57,6 +57,12 @@ RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"  # 한국어를 지원하는 리
 RERANK_CANDIDATE_K = 20  # 리랭커에게 넘길 후보 조각 수 (문서마다)
 RERANKER_MAX_LENGTH = 512  # 질문 + 조각을 이 토큰 수까지만 읽는다 (길수록 느리다)
 
+# 3단계 BM25 (질문 단어가 글자 그대로 많이 든 조각을 리랭커 후보에 더한다)
+# .env의 USE_BM25=true일 때, 리랭커(USE_RERANKER=true)와 같이 켤 때만 쓴다
+# 켜기 전에 선택 패키지를 설치한다: uv sync --extra rerank
+USE_BM25 = os.getenv("USE_BM25", "").strip().lower() == "true"
+BM25_CANDIDATE_K = 5  # 리랭커 후보에 더할 BM25 조각 수 (문서마다. 실험에서 10개와 점수가 같았다)
+
 # 생성 (1·4단계)
 ANSWER_MODEL_NAME = "gpt-5-mini"  # 1단계 질문 다듬기와 4단계 답변이 같이 쓰는 모델
 MAX_HISTORY_TURNS = 5  # AI에게 넘길 대화 기록 수 (최근 질문·답변 5번)
