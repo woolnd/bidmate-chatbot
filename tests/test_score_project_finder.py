@@ -1,8 +1,8 @@
 import pytest
 
+from bidmate.data.metadata import load_project_list
 from bidmate.schemas import ProjectInfo
 from evaluation.score_project_finder import score
-from scripts.evaluate_project_finder import load_projects
 
 
 @pytest.fixture
@@ -62,7 +62,7 @@ def test_score_keeps_filename_with_significant_spaces(tmp_path):
         "  a.hwp ,가나다기관,문서관리시스템 구축,,\n",
         encoding="utf-8",
     )
-    projects = load_projects(input_csv)
+    projects = load_project_list(input_csv)
     row = {
         "question_id": "Q1",
         "question_type": "한 문서",

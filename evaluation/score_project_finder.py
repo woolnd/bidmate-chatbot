@@ -17,9 +17,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 from bidmate.config import PROJECT_LIST_PATH, PROJECT_ROOT
+from bidmate.data.metadata import load_project_list
 from bidmate.retrieval.project_finder import find_project_ids
 from bidmate.schemas import ProjectInfo
-from scripts.evaluate_project_finder import load_projects
 
 Selector = Callable[[str, list[ProjectInfo]], list[str]]
 
@@ -41,7 +41,7 @@ def score(
 ) -> dict:
     """팀 질문 행을 받아 완전 일치 점수와 과다 선택·누락 문서 ID를 돌려준다."""
     if projects is None:
-        projects = load_projects(PROJECT_LIST_PATH)
+        projects = load_project_list(PROJECT_LIST_PATH)
     if not projects:
         raise ValueError("목록표에 문서가 없습니다.")
 
@@ -136,7 +136,7 @@ def main() -> None:
             if not REQUIRED_COLUMNS <= set(reader.fieldnames or []):
                 raise ValueError("평가 CSV의 필수 칸이 빠졌습니다.")
             questions = list(reader)
-        projects = load_projects(args.projects)
+        projects = load_project_list(args.projects)
         results = {"current": score(questions, projects)}
         if args.baseline:
             results["baseline"] = score(questions, projects, selector=_load_baseline(args.baseline))
