@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     # 흐름 연결
-    "langchain>=1.0",
     "langchain-openai>=1.0",
     "langchain-chroma>=1.0",
     "langgraph>=1.0",
