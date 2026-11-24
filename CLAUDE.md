@@ -118,7 +118,7 @@ src/bidmate/
   retrieval/          # 검색 파트: 문서 고르기, 저장·검색
   generation/         # 생성: 질문 다듬기, 프롬프트, 답변
   pipeline/           # 4단계 연결
-  service/            # 로그, 응답 캐시
+  service/            # 대화·피드백 로그
 app/                  # 웹 서버(FastAPI, server.py)와 화면(static/index.html)
 scripts/              # 한 번씩 돌리는 스크립트
 evaluation/           # 평가셋 양식과 채점
