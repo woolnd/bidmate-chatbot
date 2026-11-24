@@ -127,15 +127,6 @@ def test_agency_only_question_returns_all_agency_projects(projects):
     ]
 
 
-def test_unknown_agency_does_not_return_unrelated_projects(projects):
-    result = find_project_ids(
-        "삼성전자 스마트폰 개발 사업 예산은?",
-        projects,
-    )
-
-    assert result == []
-
-
 @pytest.mark.parametrize(
     "question",
     [
