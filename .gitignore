@@ -10,6 +10,8 @@ data/*
 *.hwpx
 *.pdf
 data_list.csv
+# 예외: 제출용 최종 보고서는 올린다 (원본 RFP가 아님)
+!docs/중급 프로젝트 보고서(3팀).pdf
 
 # 운영 로그 (질문 내용에 RFP 내용이 섞여 있다)
 logs/
