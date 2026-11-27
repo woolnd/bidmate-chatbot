@@ -4,8 +4,9 @@
 코드잇 AI 중급 프로젝트 3팀 (2026.11.09 ~ 11.30)
 
 ## 구조
-
-<img width="3600" height="2380" alt="흐름도" src="https://github.com/user-attachments/assets/dc640768-a855-4e22-85cd-eae7655f7c60" />
+<p align="center">
+  <img width="479" height="385" alt="image" src="https://github.com/user-attachments/assets/6fa73e0f-927d-48e7-a953-a900ba20dcda" />
+</p>
 
 **문서 저장 (1회)**
 `data_list.csv` + 원본 → 글자·표 추출 → 1,000자 조각(200자 겹침, 잘린 표에 헤더 재부착) → `[기관명 / 사업명]` 머리말 → 임베딩 → Chroma
