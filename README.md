@@ -105,11 +105,11 @@ uv run ruff check . && uv run ruff format .
 
 ## 팀
 
-| 이름 | 역할 | 담당 | 주요 파일 | 협업일지 |
-| --- | --- | --- | --- | --- |
-| 엄재웅 | PM · 개발 | ①④ 단계, LangGraph, 에이전트, 서버, 평가 | `generation/`, `pipeline/`, `app/` | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab0801e9f63f5cb76913da0?source=copy_link) |
-| 윤성원 | 데이터 | 목록표, 평가셋 | `data/metadata.py` | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab080b58f87ce8450658ae8?source=copy_link) |
-| 강인호 | 데이터 | 글자·표 추출 | `data/hwp_loader.py`, `pdf_loader.py` | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab080b082d7e42622a0a4e1?source=copy_link) |
-| 이석우 | 데이터 | 조각 자르기 | `data/chunker.py` | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab080c29ca0e4ce3bed6f43?source=copy_link) |
-| 김예원 | 검색 | 임베딩·저장, ③ 조각 찾기 | `retrieval/vector_store.py`, `reranker.py`, `bm25.py` | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab080d1b4e8c790b9698268?source=copy_link) |
-| 김혜린 | 검색 | ② 사업 고르기 | `retrieval/project_finder.py` | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab08004a018fad852971891?v=4153d7dd9ab080098f2e000ca469b2aa&source=copy_link) |
+| 이름 | 역할 | 담당 | 협업일지 |
+| --- | --- | --- | --- |
+| 엄재웅 | PM · 개발 | ①④ 단계, LangGraph, 에이전트, 서버, 평가 | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab0801e9f63f5cb76913da0?source=copy_link) |
+| 윤성원 | 데이터 | 목록표, 평가셋 | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab080b58f87ce8450658ae8?source=copy_link) |
+| 강인호 | 데이터 | 글자·표 추출 | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab080b082d7e42622a0a4e1?source=copy_link) |
+| 이석우 | 데이터 | 조각 자르기 | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab080c29ca0e4ce3bed6f43?source=copy_link) |
+| 김예원 | 검색 | 임베딩·저장, ③ 조각 찾기 | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab080d1b4e8c790b9698268?source=copy_link) |
+| 김혜린 | 검색 | ② 사업 고르기 | [노션](https://attractive-reason-70a.notion.site/40d3d7dd9ab08004a018fad852971891?v=4153d7dd9ab080098f2e000ca469b2aa&source=copy_link) |
