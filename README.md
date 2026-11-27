@@ -3,6 +3,8 @@
 공공기관 RFP 100개(HWP 96, PDF 4)를 검색해 **출처와 함께** 답하는 RAG 챗봇 + 질문 종류별로 길을 고르는 에이전트.
 코드잇 AI 중급 프로젝트 3팀 (2026.11.09 ~ 11.30)
 
+📄 **프로젝트 보고서**: [미리보기](docs/중급%20프로젝트%20보고서%283팀%29.pdf) · [다운로드](docs/중급%20프로젝트%20보고서%283팀%29.pdf?raw=true)
+
 ## 구조
 <p align="center">
   <img width="479" height="385" alt="image" src="https://github.com/user-attachments/assets/6fa73e0f-927d-48e7-a953-a900ba20dcda" />
